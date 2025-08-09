@@ -100,12 +100,7 @@ function parseCSV(csvText: string): Product[] {
 
 // Helper functions to extract data from products
 function getProductName(product: Product, index: number): string {
-  // First, log what we're working with
-  console.log(`🔍 Getting name for product ${index}:`, Object.keys(product))
-
-  // Comprehensive list of possible name fields from CSV
   const nameFields = [
-    // Standard name fields
     "name",
     "Name",
     "NAME",
@@ -124,53 +119,18 @@ function getProductName(product: Product, index: number): string {
     "productTitle",
     "ProductTitle",
     "PRODUCT_TITLE",
-    "item_title",
-    "itemTitle",
-    "ItemTitle",
-    "ITEM_TITLE",
-    "display_name",
-    "displayName",
-    "DisplayName",
-    "DISPLAY_NAME",
-    "label",
-    "Label",
-    "LABEL",
-
-    // Specific product type fields
-    "book_title",
-    "bookTitle",
-    "BookTitle",
-    "BOOK_TITLE",
-    "movie_title",
-    "movieTitle",
-    "MovieTitle",
-    "MOVIE_TITLE",
-    "product",
-    "Product",
-    "PRODUCT",
-    "item",
-    "Item",
-    "ITEM",
-
-    // Common CSV variations
     "Product Name",
     "Product Title",
     "Item Name",
     "Item Title",
-    "Book Title",
-    "Movie Title",
-    "Display Name",
-
-    // Other possible variations
     "description",
     "Description",
-    "DESCRIPTION", // Sometimes description contains the name
+    "DESCRIPTION",
   ]
 
   for (const field of nameFields) {
     if (product[field] && typeof product[field] === "string" && product[field].trim()) {
       const name = product[field].trim()
-      console.log(`✅ Found name in field '${field}': ${name}`)
       return name
     }
   }
@@ -193,18 +153,11 @@ function getProductName(product: Product, index: number): string {
       )
     })
 
-  console.log(
-    `🔍 Available string fields for product ${index}:`,
-    allStringFields.map(([key, value]) => `${key}: ${(value as string).slice(0, 50)}`),
-  )
-
   if (allStringFields.length > 0) {
     const [fieldName, fieldValue] = allStringFields[0]
-    console.log(`✅ Using first string field '${fieldName}' as name: ${fieldValue}`)
     return (fieldValue as string).trim()
   }
 
-  console.log(`⚠️ No name found for product ${index}, using fallback`)
   return `Product ${index + 1}`
 }
 
@@ -524,20 +477,15 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
     })
 
     console.log(`📡 Azure Blob Storage Response: ${response.status} ${response.statusText}`)
-    console.log(`📄 Final URL: ${response.url}`)
-    console.log(`📄 Content-Type: ${response.headers.get("content-type") || "unknown"}`)
-    console.log(`📄 Content-Length: ${response.headers.get("content-length") || "unknown"}`)
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
-    // Try to get response as text first
     let responseText: string
     try {
       responseText = await response.text()
       console.log(`📄 Response length: ${responseText.length} characters`)
-      console.log(`📄 Response starts with: ${responseText.slice(0, 200)}...`)
     } catch (textError) {
       console.error(`❌ Failed to read response text:`, textError)
       throw new Error(`Failed to read response: ${textError}`)
@@ -545,7 +493,6 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
 
     // Validate it's not HTML
     if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
-      console.log(`⚠️ Received HTML content instead of CSV`)
       throw new Error("Received HTML instead of CSV")
     }
 
@@ -562,7 +509,6 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
       console.log(`📊 Products array length: ${productsArray.length}`)
     } catch (parseError) {
       console.error(`❌ CSV parse error:`, parseError)
-      console.log(`📄 Raw response that failed to parse: ${responseText.slice(0, 500)}`)
       throw new Error(`Invalid CSV: ${parseError}`)
     }
 
@@ -840,11 +786,6 @@ export async function GET(request: NextRequest) {
         stock: Math.floor(Math.random() * 50) + 5,
       }
 
-      // Log the processed product name for debugging
-      console.log(
-        `📝 Processed product ${index}: name="${processedProduct.name}", category="${processedProduct.category}"`,
-      )
-
       return processedProduct
     })
 
@@ -942,16 +883,4 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     )
   }
-}
-
-// Optional: Handle OPTIONS for CORS preflight
-export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  })
 }

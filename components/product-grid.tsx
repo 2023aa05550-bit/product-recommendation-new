@@ -115,7 +115,7 @@ export function ProductGrid() {
   const [filters, setFilters] = useState<FilterState>({
     category: "all",
     minPrice: 0,
-    maxPrice: 2000, // Increased default max
+    maxPrice: 2000,
     search: "",
     sortBy: "popularity",
     sortOrder: "desc",
@@ -127,7 +127,7 @@ export function ProductGrid() {
     hasNextPage: false,
     hasPrevPage: false,
   })
-  const [limit, setLimit] = useState(20) // Increased from 8 to 20
+  const [limit, setLimit] = useState(20)
   const [categories, setCategories] = useState<string[]>([])
   const [priceRange, setPriceRange] = useState({ min: 0, max: 2000 })
 
@@ -205,7 +205,7 @@ export function ProductGrid() {
     scrollToBottom()
   }, [chatMessages])
 
-  // Fetch products with filters and pagination
+  // Fetch products with filters and pagination - Updated to use new API
   const fetchProducts = useCallback(
     async (resetPagination = false) => {
       if (resetPagination) {
@@ -232,7 +232,8 @@ export function ProductGrid() {
         const response = await fetch(`/api/products?${params}`)
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
         }
 
         const data = await response.json()
@@ -243,6 +244,7 @@ export function ProductGrid() {
           totalPages: data.pagination?.totalPages,
           categoriesCount: data.filters?.categories?.length,
           priceRange: data.filters?.priceRange,
+          dataSource: data.dataSource,
         })
 
         if (infiniteScrollEnabled && !resetPagination && pagination.currentPage > 1) {
@@ -1106,26 +1108,11 @@ export function ProductGrid() {
 
           {/* Products Section */}
           <div className="flex-1 min-w-0">
-            {/* Debug Info - Remove after testing */}
-            {process.env.NODE_ENV === "development" && (
-              <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <h3 className="font-semibold text-sm mb-2">Debug Info:</h3>
-                <div className="text-xs space-y-1">
-                  <div>Products loaded: {products.length}</div>
-                  <div>Total products: {pagination.totalProducts}</div>
-                  <div>
-                    Current page: {pagination.currentPage} of {pagination.totalPages}
-                  </div>
-                  <div>Categories: {categories.length}</div>
-                  <div>
-                    Price range: ${priceRange.min} - ${priceRange.max}
-                  </div>
-                  <div>Filters initialized: {filtersInitialized ? "Yes" : "No"}</div>
-                  <div>
-                    Active filters: Category={filters.category}, Search="{filters.search}", Price=${filters.minPrice}-$
-                    {filters.maxPrice}
-                  </div>
-                </div>
+            {/* Error Display */}
+            {error && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <h3 className="font-semibold text-sm mb-2 text-red-800">Error Loading Products:</h3>
+                <p className="text-sm text-red-600">{error}</p>
               </div>
             )}
 
@@ -1164,7 +1151,7 @@ export function ProductGrid() {
             </div>
 
             {/* Products Grid */}
-            {productsLoading && products.length === 0 ? (
+            {loading && products.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
