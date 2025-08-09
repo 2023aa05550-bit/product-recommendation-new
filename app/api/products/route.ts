@@ -90,11 +90,6 @@ function parseCSV(csvText: string): Product[] {
   }
 
   console.log(`📦 Parsed ${products.length} products from CSV`)
-  if (products.length > 0) {
-    console.log(`📋 First product keys:`, Object.keys(products[0]))
-    console.log(`📋 First product sample:`, JSON.stringify(products[0], null, 2).slice(0, 500))
-  }
-
   return products
 }
 
@@ -456,36 +451,56 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
   cachedProducts = null
   lastSuccessfulSource = null
 
-  // Get Azure SAS URL from environment variable or use fallback
-  const azureSasUrl =
-    process.env.AZURE_SAS_URL ||
+  // FIXED: Use the correct environment variable name that matches your Vercel setup
+  const sasUrl = process.env.SASURL || process.env.SAS_URL
+
+  // Fallback URL if environment variable is not set
+  const fallbackUrl =
     "https://rohitproductstore.blob.core.windows.net/products/Final_dataset.csv?sp=r&st=2025-08-09T21:26:23Z&se=2025-09-30T05:41:23Z&spr=https&sv=2024-11-04&sr=b&sig=W%2BmEkqLEp8j230HSyit1bFHCfAWhyQQv6U3tgS7x72Q%3D"
 
+  const azureSasUrl = sasUrl || fallbackUrl
+
   console.log(`🎯 PRIORITY FETCH: Attempting to load CSV from Azure Blob Storage`)
-  console.log(`🔗 Using ${process.env.AZURE_SAS_URL ? "environment variable" : "fallback"} URL`)
+  console.log(`🔗 Environment variable SASURL: ${process.env.SASURL ? "✅ Found" : "❌ Not found"}`)
+  console.log(`🔗 Environment variable SAS_URL: ${process.env.SAS_URL ? "✅ Found" : "❌ Not found"}`)
+  console.log(`🔗 Using ${sasUrl ? "environment variable" : "fallback"} URL`)
+  console.log(`🔗 Final URL length: ${azureSasUrl.length} characters`)
 
   try {
+    console.log(`📡 Starting fetch request to Azure Blob Storage...`)
+
     const response = await fetch(azureSasUrl, {
       method: "GET",
       cache: "no-store",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ProductGrid/1.0)",
         Accept: "text/csv, text/plain, */*",
-        "Accept-Encoding": "gzip, deflate, br",
         "Cache-Control": "no-cache",
       },
     })
 
     console.log(`📡 Azure Blob Storage Response: ${response.status} ${response.statusText}`)
+    console.log(`📄 Response URL: ${response.url}`)
+    console.log(`📄 Content-Type: ${response.headers.get("content-type") || "unknown"}`)
+    console.log(`📄 Content-Length: ${response.headers.get("content-length") || "unknown"}`)
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      const errorText = await response.text().catch(() => "Unable to read error response")
+      console.error(`❌ HTTP Error Details:`, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        body: errorText.slice(0, 500),
+      })
+      throw new Error(`HTTP ${response.status}: ${response.statusText}. Response: ${errorText.slice(0, 200)}`)
     }
 
+    // Try to get response as text first
     let responseText: string
     try {
       responseText = await response.text()
       console.log(`📄 Response length: ${responseText.length} characters`)
+      console.log(`📄 Response starts with: ${responseText.slice(0, 200)}...`)
     } catch (textError) {
       console.error(`❌ Failed to read response text:`, textError)
       throw new Error(`Failed to read response: ${textError}`)
@@ -493,12 +508,14 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
 
     // Validate it's not HTML
     if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
-      throw new Error("Received HTML instead of CSV")
+      console.error(`⚠️ Received HTML content instead of CSV`)
+      console.log(`📄 HTML content preview: ${responseText.slice(0, 500)}`)
+      throw new Error("Received HTML instead of CSV - check SAS URL permissions and expiration")
     }
 
     // Validate it's not empty
     if (!responseText.trim()) {
-      throw new Error("Empty response received")
+      throw new Error("Empty response received from Azure Blob Storage")
     }
 
     // Parse CSV
@@ -509,11 +526,12 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
       console.log(`📊 Products array length: ${productsArray.length}`)
     } catch (parseError) {
       console.error(`❌ CSV parse error:`, parseError)
-      throw new Error(`Invalid CSV: ${parseError}`)
+      console.log(`📄 Raw response that failed to parse (first 500 chars): ${responseText.slice(0, 500)}`)
+      throw new Error(`Invalid CSV format: ${parseError}`)
     }
 
     if (productsArray.length === 0) {
-      throw new Error("Empty products array")
+      throw new Error("CSV parsed successfully but contains no product data")
     }
 
     // Process products with source tracking
@@ -535,6 +553,11 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
     return processedProducts
   } catch (error) {
     console.error(`❌ Azure Blob Storage CSV failed:`, error)
+    console.error(`❌ Full error details:`, {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    })
 
     // Try alternative JSON sources as fallback
     console.log(`🔄 Trying alternative JSON sources...`)
@@ -617,7 +640,7 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
     cachedProducts = sampleData
     cacheTimestamp = Date.now()
     lastSuccessfulSource = "Sample Data Fallback"
-    lastErrorDetails = `All sources failed. Primary error: ${error}. Using sample data.`
+    lastErrorDetails = `All sources failed. Primary error: ${error.message}. Using sample data.`
 
     return sampleData
   }
@@ -763,6 +786,12 @@ export async function GET(request: NextRequest) {
   }
 
   console.log("🔍 API Request filters:", filters)
+  console.log("🔍 Environment check:", {
+    SASURL: process.env.SASURL ? "✅ Available" : "❌ Missing",
+    SAS_URL: process.env.SAS_URL ? "✅ Available" : "❌ Missing",
+    NODE_ENV: process.env.NODE_ENV,
+    VERCEL: process.env.VERCEL ? "✅ Running on Vercel" : "❌ Not on Vercel",
+  })
 
   try {
     // Fetch products from Azure Blob Storage CSV
@@ -870,15 +899,28 @@ export async function GET(request: NextRequest) {
         fetchedAt: new Date().toISOString(),
         cacheAge: Date.now() - cacheTimestamp,
         lastErrorDetails,
+        environmentVariables: {
+          SASURL: process.env.SASURL ? "Available" : "Missing",
+          SAS_URL: process.env.SAS_URL ? "Available" : "Missing",
+        },
       },
     })
   } catch (error) {
     console.error("❌ Error in API:", error)
+    console.error("❌ Full error stack:", error.stack)
+
     return NextResponse.json(
       {
         error: "Failed to fetch products",
-        details: String(error),
+        details: error.message,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
         dataSource: lastSuccessfulSource,
+        environmentCheck: {
+          SASURL: process.env.SASURL ? "Available" : "Missing",
+          SAS_URL: process.env.SAS_URL ? "Available" : "Missing",
+          NODE_ENV: process.env.NODE_ENV,
+          VERCEL: process.env.VERCEL ? "Running on Vercel" : "Not on Vercel",
+        },
       },
       { status: 500 },
     )
