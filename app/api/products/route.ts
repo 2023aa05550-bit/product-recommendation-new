@@ -22,75 +22,121 @@ let lastErrorDetails: string | null = null
 let lastSuccessfulSource: string | null = null
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
-// CSV parsing function
-function parseCSV(csvText: string): Product[] {
-  const lines = csvText.trim().split("\n")
-  if (lines.length < 2) {
-    throw new Error("CSV file must have at least a header and one data row")
+// Streaming CSV parser for large files
+async function parseCSVStream(response: Response): Promise<Product[]> {
+  console.log(`🔍 Starting streaming CSV parse`)
+
+  if (!response.body) {
+    throw new Error("Response body is null")
   }
 
-  // Parse header - handle quoted headers and clean them
-  const headerLine = lines[0]
-  const headers = []
-  let currentHeader = ""
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+
+  let buffer = ""
+  let headers: string[] = []
+  let headersParsed = false
+  const products: Product[] = []
+  let lineCount = 0
+  const MAX_PRODUCTS = 500 // Limit to prevent memory issues
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+
+      if (done) break
+
+      // Decode chunk and add to buffer
+      buffer += decoder.decode(value, { stream: true })
+
+      // Process complete lines
+      let newlineIndex
+      while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, newlineIndex).trim()
+        buffer = buffer.slice(newlineIndex + 1)
+
+        if (!line) continue // Skip empty lines
+
+        lineCount++
+
+        if (!headersParsed) {
+          // Parse headers
+          headers = parseCSVLine(line)
+          headersParsed = true
+          console.log(`📋 CSV Headers (${headers.length}):`, headers.slice(0, 10))
+          continue
+        }
+
+        // Parse data row
+        try {
+          const values = parseCSVLine(line)
+          const product: Product = {}
+
+          headers.forEach((header, index) => {
+            product[header] = values[index] || ""
+          })
+
+          product.originalIndex = products.length
+          products.push(product)
+
+          // Log first few products for debugging
+          if (products.length <= 3) {
+            console.log(`📦 Sample product ${products.length}:`, {
+              name: getProductName(product, products.length - 1),
+              category: getProductCategories(product)[0],
+              price: getPrice(product),
+            })
+          }
+
+          // Stop if we have enough products
+          if (products.length >= MAX_PRODUCTS) {
+            console.log(`🛑 Reached maximum products limit: ${MAX_PRODUCTS}`)
+            break
+          }
+        } catch (rowError) {
+          console.warn(`⚠️ Failed to parse row ${lineCount}: ${rowError.message}`)
+          continue
+        }
+      }
+
+      // Break if we have enough products
+      if (products.length >= MAX_PRODUCTS) break
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  console.log(`📦 Streaming parse complete: ${products.length} products from ${lineCount} lines`)
+
+  if (products.length === 0) {
+    throw new Error(`No valid products found. Processed ${lineCount} lines`)
+  }
+
+  return products
+}
+
+// Helper function to parse a single CSV line
+function parseCSVLine(line: string): string[] {
+  const values: string[] = []
+  let currentValue = ""
   let inQuotes = false
 
-  for (let i = 0; i < headerLine.length; i++) {
-    const char = headerLine[i]
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
 
     if (char === '"') {
       inQuotes = !inQuotes
     } else if (char === "," && !inQuotes) {
-      headers.push(currentHeader.trim().replace(/"/g, ""))
-      currentHeader = ""
+      values.push(currentValue.trim().replace(/^"|"$/g, ""))
+      currentValue = ""
     } else {
-      currentHeader += char
+      currentValue += char
     }
   }
-  headers.push(currentHeader.trim().replace(/"/g, ""))
 
-  console.log(`📋 CSV Headers (${headers.length}):`, headers)
-
-  // Parse data rows
-  const products: Product[] = []
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim()
-    if (!line) continue // Skip empty lines
-
-    // Parse CSV line with proper quote handling
-    const values = []
-    let currentValue = ""
-    let inQuotes = false
-
-    for (let j = 0; j < line.length; j++) {
-      const char = line[j]
-
-      if (char === '"') {
-        inQuotes = !inQuotes
-      } else if (char === "," && !inQuotes) {
-        values.push(currentValue.trim().replace(/^"|"$/g, ""))
-        currentValue = ""
-      } else {
-        currentValue += char
-      }
-    }
-
-    // Add the last value
-    values.push(currentValue.trim().replace(/^"|"$/g, ""))
-
-    // Create product object
-    const product: Product = {}
-    headers.forEach((header, index) => {
-      const value = values[index] || ""
-      product[header] = value
-    })
-
-    product.originalIndex = i - 1
-    products.push(product)
-  }
-
-  console.log(`📦 Parsed ${products.length} products from CSV`)
-  return products
+  // Add the last value
+  values.push(currentValue.trim().replace(/^"|"$/g, ""))
+  return values
 }
 
 // Helper functions to extract data from products
@@ -125,12 +171,11 @@ function getProductName(product: Product, index: number): string {
 
   for (const field of nameFields) {
     if (product[field] && typeof product[field] === "string" && product[field].trim()) {
-      const name = product[field].trim()
-      return name
+      return product[field].trim()
     }
   }
 
-  // If no name field found, try to find any string field that looks like a name
+  // Find any string field that looks like a name
   const allStringFields = Object.entries(product)
     .filter(([key, value]) => typeof value === "string" && value.trim())
     .filter(([key, value]) => {
@@ -149,8 +194,7 @@ function getProductName(product: Product, index: number): string {
     })
 
   if (allStringFields.length > 0) {
-    const [fieldName, fieldValue] = allStringFields[0]
-    return (fieldValue as string).trim()
+    return (allStringFields[0][1] as string).trim()
   }
 
   return `Product ${index + 1}`
@@ -451,23 +495,18 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
   cachedProducts = null
   lastSuccessfulSource = null
 
-  // FIXED: Use the correct environment variable name that matches your Vercel setup
   const sasUrl = process.env.SASURL || process.env.SAS_URL
-
-  // Fallback URL if environment variable is not set
   const fallbackUrl =
     "https://rohitproductstore.blob.core.windows.net/products/Final_dataset.csv?sp=r&st=2025-08-09T21:26:23Z&se=2025-09-30T05:41:23Z&spr=https&sv=2024-11-04&sr=b&sig=W%2BmEkqLEp8j230HSyit1bFHCfAWhyQQv6U3tgS7x72Q%3D"
-
   const azureSasUrl = sasUrl || fallbackUrl
 
   console.log(`🎯 PRIORITY FETCH: Attempting to load CSV from Azure Blob Storage`)
   console.log(`🔗 Environment variable SASURL: ${process.env.SASURL ? "✅ Found" : "❌ Not found"}`)
   console.log(`🔗 Environment variable SAS_URL: ${process.env.SAS_URL ? "✅ Found" : "❌ Not found"}`)
   console.log(`🔗 Using ${sasUrl ? "environment variable" : "fallback"} URL`)
-  console.log(`🔗 Final URL length: ${azureSasUrl.length} characters`)
 
   try {
-    console.log(`📡 Starting fetch request to Azure Blob Storage...`)
+    console.log(`📡 Starting streaming fetch request to Azure Blob Storage...`)
 
     const response = await fetch(azureSasUrl, {
       method: "GET",
@@ -480,54 +519,26 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
     })
 
     console.log(`📡 Azure Blob Storage Response: ${response.status} ${response.statusText}`)
-    console.log(`📄 Response URL: ${response.url}`)
     console.log(`📄 Content-Type: ${response.headers.get("content-type") || "unknown"}`)
     console.log(`📄 Content-Length: ${response.headers.get("content-length") || "unknown"}`)
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unable to read error response")
-      console.error(`❌ HTTP Error Details:`, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
-        body: errorText.slice(0, 500),
-      })
-      throw new Error(`HTTP ${response.status}: ${response.statusText}. Response: ${errorText.slice(0, 200)}`)
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
-    // Try to get response as text first
-    let responseText: string
-    try {
-      responseText = await response.text()
-      console.log(`📄 Response length: ${responseText.length} characters`)
-      console.log(`📄 Response starts with: ${responseText.slice(0, 200)}...`)
-    } catch (textError) {
-      console.error(`❌ Failed to read response text:`, textError)
-      throw new Error(`Failed to read response: ${textError}`)
+    if (!response.body) {
+      throw new Error("Response body is null - streaming not supported")
     }
 
-    // Validate it's not HTML
-    if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
-      console.error(`⚠️ Received HTML content instead of CSV`)
-      console.log(`📄 HTML content preview: ${responseText.slice(0, 500)}`)
-      throw new Error("Received HTML instead of CSV - check SAS URL permissions and expiration")
-    }
-
-    // Validate it's not empty
-    if (!responseText.trim()) {
-      throw new Error("Empty response received from Azure Blob Storage")
-    }
-
-    // Parse CSV
+    // Use streaming parser for large files
     let productsArray: Product[]
     try {
-      productsArray = parseCSV(responseText)
-      console.log(`✅ CSV parsed successfully`)
+      productsArray = await parseCSVStream(response)
+      console.log(`✅ CSV streaming parse successful`)
       console.log(`📊 Products array length: ${productsArray.length}`)
     } catch (parseError) {
-      console.error(`❌ CSV parse error:`, parseError)
-      console.log(`📄 Raw response that failed to parse (first 500 chars): ${responseText.slice(0, 500)}`)
-      throw new Error(`Invalid CSV format: ${parseError}`)
+      console.error(`❌ CSV streaming parse error:`, parseError)
+      throw new Error(`Invalid CSV format: ${parseError.message}`)
     }
 
     if (productsArray.length === 0) {
@@ -538,7 +549,7 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
     const processedProducts = productsArray.map((product, index) => ({
       ...product,
       id: product.id || product.Id || product.ID || `csv-product-${index}`,
-      dataSource: "Azure Blob Storage CSV",
+      dataSource: "Azure Blob Storage CSV (Streaming)",
       fetchedAt: new Date().toISOString(),
     }))
 
@@ -547,17 +558,12 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
     // Cache the results
     cachedProducts = processedProducts
     cacheTimestamp = Date.now()
-    lastSuccessfulSource = "Azure Blob Storage CSV"
+    lastSuccessfulSource = "Azure Blob Storage CSV (Streaming)"
     lastErrorDetails = null
 
     return processedProducts
   } catch (error) {
     console.error(`❌ Azure Blob Storage CSV failed:`, error)
-    console.error(`❌ Full error details:`, {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    })
 
     // Try alternative JSON sources as fallback
     console.log(`🔄 Trying alternative JSON sources...`)
@@ -579,7 +585,7 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
 
     for (const source of alternativeSources) {
       try {
-        console.log(`🔄 Trying: ${source.name} - ${source.url}`)
+        console.log(`🔄 Trying: ${source.name}`)
 
         const response = await fetch(source.url, {
           method: "GET",
@@ -786,12 +792,6 @@ export async function GET(request: NextRequest) {
   }
 
   console.log("🔍 API Request filters:", filters)
-  console.log("🔍 Environment check:", {
-    SASURL: process.env.SASURL ? "✅ Available" : "❌ Missing",
-    SAS_URL: process.env.SAS_URL ? "✅ Available" : "❌ Missing",
-    NODE_ENV: process.env.NODE_ENV,
-    VERCEL: process.env.VERCEL ? "✅ Running on Vercel" : "❌ Not on Vercel",
-  })
 
   try {
     // Fetch products from Azure Blob Storage CSV
@@ -907,7 +907,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error("❌ Error in API:", error)
-    console.error("❌ Full error stack:", error.stack)
 
     return NextResponse.json(
       {
