@@ -24,30 +24,30 @@ const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
 // CSV parsing function
 function parseCSV(csvText: string): Product[] {
-  const lines = csvText.trim().split('\n')
+  const lines = csvText.trim().split("\n")
   if (lines.length < 2) {
-    throw new Error('CSV file must have at least a header and one data row')
+    throw new Error("CSV file must have at least a header and one data row")
   }
 
   // Parse header - handle quoted headers and clean them
   const headerLine = lines[0]
   const headers = []
-  let currentHeader = ''
+  let currentHeader = ""
   let inQuotes = false
-  
+
   for (let i = 0; i < headerLine.length; i++) {
     const char = headerLine[i]
-    
+
     if (char === '"') {
       inQuotes = !inQuotes
-    } else if (char === ',' && !inQuotes) {
-      headers.push(currentHeader.trim().replace(/"/g, ''))
-      currentHeader = ''
+    } else if (char === "," && !inQuotes) {
+      headers.push(currentHeader.trim().replace(/"/g, ""))
+      currentHeader = ""
     } else {
       currentHeader += char
     }
   }
-  headers.push(currentHeader.trim().replace(/"/g, ''))
+  headers.push(currentHeader.trim().replace(/"/g, ""))
 
   console.log(`📋 CSV Headers (${headers.length}):`, headers)
 
@@ -59,29 +59,29 @@ function parseCSV(csvText: string): Product[] {
 
     // Parse CSV line with proper quote handling
     const values = []
-    let currentValue = ''
+    let currentValue = ""
     let inQuotes = false
-    
+
     for (let j = 0; j < line.length; j++) {
       const char = line[j]
-      
+
       if (char === '"') {
         inQuotes = !inQuotes
-      } else if (char === ',' && !inQuotes) {
-        values.push(currentValue.trim().replace(/^"|"$/g, ''))
-        currentValue = ''
+      } else if (char === "," && !inQuotes) {
+        values.push(currentValue.trim().replace(/^"|"$/g, ""))
+        currentValue = ""
       } else {
         currentValue += char
       }
     }
-    
+
     // Add the last value
-    values.push(currentValue.trim().replace(/^"|"$/g, ''))
+    values.push(currentValue.trim().replace(/^"|"$/g, ""))
 
     // Create product object
     const product: Product = {}
     headers.forEach((header, index) => {
-      const value = values[index] || ''
+      const value = values[index] || ""
       product[header] = value
     })
 
@@ -94,8 +94,402 @@ function parseCSV(csvText: string): Product[] {
     console.log(`📋 First product keys:`, Object.keys(products[0]))
     console.log(`📋 First product sample:`, JSON.stringify(products[0], null, 2).slice(0, 500))
   }
-  
+
   return products
+}
+
+// Helper functions to extract data from products
+function getProductName(product: Product, index: number): string {
+  // First, log what we're working with
+  console.log(`🔍 Getting name for product ${index}:`, Object.keys(product))
+
+  // Comprehensive list of possible name fields from CSV
+  const nameFields = [
+    // Standard name fields
+    "name",
+    "Name",
+    "NAME",
+    "title",
+    "Title",
+    "TITLE",
+    "product_name",
+    "productName",
+    "ProductName",
+    "PRODUCT_NAME",
+    "item_name",
+    "itemName",
+    "ItemName",
+    "ITEM_NAME",
+    "product_title",
+    "productTitle",
+    "ProductTitle",
+    "PRODUCT_TITLE",
+    "item_title",
+    "itemTitle",
+    "ItemTitle",
+    "ITEM_TITLE",
+    "display_name",
+    "displayName",
+    "DisplayName",
+    "DISPLAY_NAME",
+    "label",
+    "Label",
+    "LABEL",
+
+    // Specific product type fields
+    "book_title",
+    "bookTitle",
+    "BookTitle",
+    "BOOK_TITLE",
+    "movie_title",
+    "movieTitle",
+    "MovieTitle",
+    "MOVIE_TITLE",
+    "product",
+    "Product",
+    "PRODUCT",
+    "item",
+    "Item",
+    "ITEM",
+
+    // Common CSV variations
+    "Product Name",
+    "Product Title",
+    "Item Name",
+    "Item Title",
+    "Book Title",
+    "Movie Title",
+    "Display Name",
+
+    // Other possible variations
+    "description",
+    "Description",
+    "DESCRIPTION", // Sometimes description contains the name
+  ]
+
+  for (const field of nameFields) {
+    if (product[field] && typeof product[field] === "string" && product[field].trim()) {
+      const name = product[field].trim()
+      console.log(`✅ Found name in field '${field}': ${name}`)
+      return name
+    }
+  }
+
+  // If no name field found, try to find any string field that looks like a name
+  const allStringFields = Object.entries(product)
+    .filter(([key, value]) => typeof value === "string" && value.trim())
+    .filter(([key, value]) => {
+      const val = value as string
+      return (
+        val.length > 2 &&
+        val.length < 200 &&
+        !val.startsWith("http") &&
+        !val.startsWith("data:") &&
+        !val.match(/^[A-Za-z0-9+/]*={0,2}$/) &&
+        !val.includes("base64") &&
+        !key.toLowerCase().includes("image") &&
+        !key.toLowerCase().includes("url") &&
+        !key.toLowerCase().includes("id")
+      )
+    })
+
+  console.log(
+    `🔍 Available string fields for product ${index}:`,
+    allStringFields.map(([key, value]) => `${key}: ${(value as string).slice(0, 50)}`),
+  )
+
+  if (allStringFields.length > 0) {
+    const [fieldName, fieldValue] = allStringFields[0]
+    console.log(`✅ Using first string field '${fieldName}' as name: ${fieldValue}`)
+    return (fieldValue as string).trim()
+  }
+
+  console.log(`⚠️ No name found for product ${index}, using fallback`)
+  return `Product ${index + 1}`
+}
+
+function getProductCategories(product: Product): string[] {
+  const categoryFields = [
+    "category",
+    "Category",
+    "CATEGORY",
+    "type",
+    "Type",
+    "TYPE",
+    "group",
+    "Group",
+    "GROUP",
+    "categories",
+    "Categories",
+    "CATEGORIES",
+    "genre",
+    "Genre",
+    "GENRE",
+    "classification",
+    "Classification",
+    "CLASSIFICATION",
+    "Category Name",
+    "Product Category",
+    "Item Category",
+    "product_category",
+    "productCategory",
+    "ProductCategory",
+    "item_category",
+    "itemCategory",
+    "ItemCategory",
+  ]
+
+  for (const field of categoryFields) {
+    if (product[field] && typeof product[field] === "string" && product[field].trim()) {
+      const categoryString = product[field].trim()
+      const categories = categoryString
+        .split(/[|>/\\,;]/)
+        .map((cat) => cat.trim())
+        .filter((cat) => cat.length > 0)
+
+      if (categories.length > 0) {
+        return categories
+      }
+    }
+  }
+
+  return ["General"]
+}
+
+function getProductDescription(product: Product): string {
+  const descFields = [
+    "description",
+    "Description",
+    "DESCRIPTION",
+    "desc",
+    "Desc",
+    "DESC",
+    "details",
+    "Details",
+    "DETAILS",
+    "summary",
+    "Summary",
+    "SUMMARY",
+    "info",
+    "Info",
+    "INFO",
+    "Product Description",
+    "Item Description",
+    "product_description",
+    "productDescription",
+    "ProductDescription",
+    "item_description",
+    "itemDescription",
+    "ItemDescription",
+    "about",
+    "About",
+    "ABOUT",
+  ]
+
+  for (const field of descFields) {
+    if (product[field] && typeof product[field] === "string" && product[field].trim()) {
+      return product[field].trim()
+    }
+  }
+
+  return "No description available"
+}
+
+function getProductImage(product: Product): string | null {
+  const imageFields = [
+    "image",
+    "Image",
+    "IMAGE",
+    "img",
+    "Img",
+    "IMG",
+    "imageUrl",
+    "image_url",
+    "ImageUrl",
+    "IMAGE_URL",
+    "picture",
+    "Picture",
+    "PICTURE",
+    "photo",
+    "Photo",
+    "PHOTO",
+    "thumbnail",
+    "Thumbnail",
+    "THUMBNAIL",
+    "src",
+    "Src",
+    "SRC",
+    "url",
+    "Url",
+    "URL",
+    "base64",
+    "Base64",
+    "BASE64",
+    "imageData",
+    "image_data",
+    "ImageData",
+    "IMAGE_DATA",
+    "data",
+    "Data",
+    "DATA",
+    "Product Image",
+    "Item Image",
+    "product_image",
+    "productImage",
+    "ProductImage",
+    "item_image",
+    "itemImage",
+    "ItemImage",
+  ]
+
+  for (const field of imageFields) {
+    const value = product[field]
+    if (value && typeof value === "string" && value.trim()) {
+      if (value.startsWith("data:image/")) {
+        return value
+      }
+      if (value.startsWith("http")) {
+        return value
+      }
+      if (value.match(/^[A-Za-z0-9+/]*={0,2}$/) && value.length > 100) {
+        return `data:image/jpeg;base64,${value}`
+      }
+    }
+  }
+
+  return null
+}
+
+function getPrice(product: Product): number {
+  const priceFields = [
+    "price",
+    "Price",
+    "PRICE",
+    "cost",
+    "Cost",
+    "COST",
+    "amount",
+    "Amount",
+    "AMOUNT",
+    "value",
+    "Value",
+    "VALUE",
+    "Product Price",
+    "Item Price",
+    "product_price",
+    "productPrice",
+    "ProductPrice",
+    "item_price",
+    "itemPrice",
+    "ItemPrice",
+    "unit_price",
+    "unitPrice",
+    "UnitPrice",
+  ]
+
+  for (const field of priceFields) {
+    if (product[field] !== undefined) {
+      const value = Number.parseFloat(product[field])
+      if (!isNaN(value) && value > 0) {
+        return value
+      }
+    }
+  }
+
+  return Math.floor(Math.random() * 100) + 20
+}
+
+function getPopularity(product: Product): number {
+  const popularityFields = [
+    "popularity",
+    "Popularity",
+    "POPULARITY",
+    "rating",
+    "Rating",
+    "RATING",
+    "score",
+    "Score",
+    "SCORE",
+    "likes",
+    "Likes",
+    "LIKES",
+    "past_purchase_count",
+    "pastPurchaseCount",
+    "PastPurchaseCount",
+    "purchase_count",
+    "purchaseCount",
+    "PurchaseCount",
+    "views",
+    "Views",
+    "VIEWS",
+    "Product Rating",
+    "Item Rating",
+    "product_rating",
+    "productRating",
+    "ProductRating",
+    "item_rating",
+    "itemRating",
+    "ItemRating",
+  ]
+
+  for (const field of popularityFields) {
+    if (product[field] !== undefined) {
+      const value = Number.parseFloat(product[field])
+      if (!isNaN(value)) {
+        return Math.round(value)
+      }
+    }
+  }
+
+  return Math.floor(Math.random() * 1000) + 100
+}
+
+function getNetFeedback(product: Product): number {
+  const feedbackFields = [
+    "feedback",
+    "Feedback",
+    "FEEDBACK",
+    "reviews",
+    "Reviews",
+    "REVIEWS",
+    "votes",
+    "Votes",
+    "VOTES",
+    "net_feedback",
+    "netFeedback",
+    "NetFeedback",
+    "NET_FEEDBACK",
+    "positive_reviews",
+    "positiveReviews",
+    "PositiveReviews",
+    "review_score",
+    "reviewScore",
+    "ReviewScore",
+    "REVIEW_SCORE",
+    "thumbs_up",
+    "thumbsUp",
+    "ThumbsUp",
+    "THUMBS_UP",
+    "Product Reviews",
+    "Item Reviews",
+    "product_reviews",
+    "productReviews",
+    "ProductReviews",
+    "item_reviews",
+    "itemReviews",
+    "ItemReviews",
+  ]
+
+  for (const field of feedbackFields) {
+    if (product[field] !== undefined) {
+      const value = Number.parseInt(product[field])
+      if (!isNaN(value)) {
+        return value
+      }
+    }
+  }
+
+  return Math.floor(Math.random() * 200) + 50
 }
 
 async function fetchProductsFromCSV(): Promise<Product[]> {
@@ -109,14 +503,16 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
   cachedProducts = null
   lastSuccessfulSource = null
 
-  // Primary data source - Azure Blob Storage CSV
-  const primaryUrl = "https://rohitproductstore.blob.core.windows.net/products/Final_dataset.csv?sp=r&st=2025-08-08T06:56:15Z&se=2025-10-31T15:11:15Z&spr=https&sv=2024-11-04&sr=b&sig=B9nsMsQMEpcNabzC%2BgMrBa5Y8%2FjJZJMDdKrglSQ3l%2FA%3D"
+  // Get Azure SAS URL from environment variable or use fallback
+  const azureSasUrl =
+    process.env.AZURE_SAS_URL ||
+    "https://rohitproductstore.blob.core.windows.net/products/Final_dataset.csv?sp=r&st=2025-08-09T21:26:23Z&se=2025-09-30T05:41:23Z&spr=https&sv=2024-11-04&sr=b&sig=W%2BmEkqLEp8j230HSyit1bFHCfAWhyQQv6U3tgS7x72Q%3D"
 
   console.log(`🎯 PRIORITY FETCH: Attempting to load CSV from Azure Blob Storage`)
-  console.log(`🔗 URL: ${primaryUrl}`)
+  console.log(`🔗 Using ${process.env.AZURE_SAS_URL ? "environment variable" : "fallback"} URL`)
 
   try {
-    const response = await fetch(primaryUrl, {
+    const response = await fetch(azureSasUrl, {
       method: "GET",
       cache: "no-store",
       headers: {
@@ -406,239 +802,6 @@ function createSampleData(): Product[] {
   ]
 }
 
-// Helper functions to extract data from products
-function getProductName(product: Product, index: number): string {
-  // First, log what we're working with
-  console.log(`🔍 Getting name for product ${index}:`, Object.keys(product))
-  
-  // Comprehensive list of possible name fields from CSV
-  const nameFields = [
-    // Standard name fields
-    "name", "Name", "NAME",
-    "title", "Title", "TITLE", 
-    "product_name", "productName", "ProductName", "PRODUCT_NAME",
-    "item_name", "itemName", "ItemName", "ITEM_NAME",
-    "product_title", "productTitle", "ProductTitle", "PRODUCT_TITLE",
-    "item_title", "itemTitle", "ItemTitle", "ITEM_TITLE",
-    "display_name", "displayName", "DisplayName", "DISPLAY_NAME",
-    "label", "Label", "LABEL",
-    
-    // Specific product type fields
-    "book_title", "bookTitle", "BookTitle", "BOOK_TITLE",
-    "movie_title", "movieTitle", "MovieTitle", "MOVIE_TITLE",
-    "product", "Product", "PRODUCT",
-    "item", "Item", "ITEM",
-    
-    // Common CSV variations
-    "Product Name", "Product Title", "Item Name", "Item Title",
-    "Book Title", "Movie Title", "Display Name",
-    
-    // Other possible variations
-    "description", "Description", "DESCRIPTION" // Sometimes description contains the name
-  ]
-
-  for (const field of nameFields) {
-    if (product[field] && typeof product[field] === "string" && product[field].trim()) {
-      const name = product[field].trim()
-      console.log(`✅ Found name in field '${field}': ${name}`)
-      return name
-    }
-  }
-
-  // If no name field found, try to find any string field that looks like a name
-  const allStringFields = Object.entries(product)
-    .filter(([key, value]) => typeof value === "string" && value.trim())
-    .filter(([key, value]) => {
-      const val = value as string
-      return (
-        val.length > 2 &&
-        val.length < 200 &&
-        !val.startsWith("http") &&
-        !val.startsWith("data:") &&
-        !val.match(/^[A-Za-z0-9+/]*={0,2}$/) &&
-        !val.includes("base64") &&
-        !key.toLowerCase().includes("image") &&
-        !key.toLowerCase().includes("url") &&
-        !key.toLowerCase().includes("id")
-      )
-    })
-
-  console.log(`🔍 Available string fields for product ${index}:`, allStringFields.map(([key, value]) => `${key}: ${(value as string).slice(0, 50)}`))
-
-  if (allStringFields.length > 0) {
-    const [fieldName, fieldValue] = allStringFields[0]
-    console.log(`✅ Using first string field '${fieldName}' as name: ${fieldValue}`)
-    return (fieldValue as string).trim()
-  }
-
-  console.log(`⚠️ No name found for product ${index}, using fallback`)
-  return `Product ${index + 1}`
-}
-
-function getProductCategories(product: Product): string[] {
-  const categoryFields = [
-    "category", "Category", "CATEGORY",
-    "type", "Type", "TYPE",
-    "group", "Group", "GROUP",
-    "categories", "Categories", "CATEGORIES",
-    "genre", "Genre", "GENRE",
-    "classification", "Classification", "CLASSIFICATION",
-    "Category Name", "Product Category", "Item Category",
-    "product_category", "productCategory", "ProductCategory",
-    "item_category", "itemCategory", "ItemCategory",
-  ]
-
-  for (const field of categoryFields) {
-    if (product[field] && typeof product[field] === "string" && product[field].trim()) {
-      const categoryString = product[field].trim()
-      const categories = categoryString
-        .split(/[|>/\\,;]/)
-        .map((cat) => cat.trim())
-        .filter((cat) => cat.length > 0)
-
-      if (categories.length > 0) {
-        return categories
-      }
-    }
-  }
-
-  return ["General"]
-}
-
-function getProductDescription(product: Product): string {
-  const descFields = [
-    "description", "Description", "DESCRIPTION",
-    "desc", "Desc", "DESC",
-    "details", "Details", "DETAILS",
-    "summary", "Summary", "SUMMARY",
-    "info", "Info", "INFO",
-    "Product Description", "Item Description",
-    "product_description", "productDescription", "ProductDescription",
-    "item_description", "itemDescription", "ItemDescription",
-    "about", "About", "ABOUT",
-  ]
-
-  for (const field of descFields) {
-    if (product[field] && typeof product[field] === "string" && product[field].trim()) {
-      return product[field].trim()
-    }
-  }
-
-  return "No description available"
-}
-
-function getProductImage(product: Product): string | null {
-  const imageFields = [
-    "image", "Image", "IMAGE",
-    "img", "Img", "IMG",
-    "imageUrl", "image_url", "ImageUrl", "IMAGE_URL",
-    "picture", "Picture", "PICTURE",
-    "photo", "Photo", "PHOTO",
-    "thumbnail", "Thumbnail", "THUMBNAIL",
-    "src", "Src", "SRC",
-    "url", "Url", "URL",
-    "base64", "Base64", "BASE64",
-    "imageData", "image_data", "ImageData", "IMAGE_DATA",
-    "data", "Data", "DATA",
-    "Product Image", "Item Image",
-    "product_image", "productImage", "ProductImage",
-    "item_image", "itemImage", "ItemImage",
-  ]
-
-  for (const field of imageFields) {
-    const value = product[field]
-    if (value && typeof value === "string" && value.trim()) {
-      if (value.startsWith("data:image/")) {
-        return value
-      }
-      if (value.startsWith("http")) {
-        return value
-      }
-      if (value.match(/^[A-Za-z0-9+/]*={0,2}$/) && value.length > 100) {
-        return `data:image/jpeg;base64,${value}`
-      }
-    }
-  }
-
-  return null
-}
-
-function getPrice(product: Product): number {
-  const priceFields = [
-    "price", "Price", "PRICE",
-    "cost", "Cost", "COST",
-    "amount", "Amount", "AMOUNT",
-    "value", "Value", "VALUE",
-    "Product Price", "Item Price",
-    "product_price", "productPrice", "ProductPrice",
-    "item_price", "itemPrice", "ItemPrice",
-    "unit_price", "unitPrice", "UnitPrice",
-  ]
-
-  for (const field of priceFields) {
-    if (product[field] !== undefined) {
-      const value = Number.parseFloat(product[field])
-      if (!isNaN(value) && value > 0) {
-        return value
-      }
-    }
-  }
-
-  return Math.floor(Math.random() * 100) + 20
-}
-
-function getPopularity(product: Product): number {
-  const popularityFields = [
-    "popularity", "Popularity", "POPULARITY",
-    "rating", "Rating", "RATING",
-    "score", "Score", "SCORE",
-    "likes", "Likes", "LIKES",
-    "past_purchase_count", "pastPurchaseCount", "PastPurchaseCount",
-    "purchase_count", "purchaseCount", "PurchaseCount",
-    "views", "Views", "VIEWS",
-    "Product Rating", "Item Rating",
-    "product_rating", "productRating", "ProductRating",
-    "item_rating", "itemRating", "ItemRating",
-  ]
-
-  for (const field of popularityFields) {
-    if (product[field] !== undefined) {
-      const value = Number.parseFloat(product[field])
-      if (!isNaN(value)) {
-        return Math.round(value)
-      }
-    }
-  }
-
-  return Math.floor(Math.random() * 1000) + 100
-}
-
-function getNetFeedback(product: Product): number {
-  const feedbackFields = [
-    "feedback", "Feedback", "FEEDBACK",
-    "reviews", "Reviews", "REVIEWS",
-    "votes", "Votes", "VOTES",
-    "net_feedback", "netFeedback", "NetFeedback", "NET_FEEDBACK",
-    "positive_reviews", "positiveReviews", "PositiveReviews",
-    "review_score", "reviewScore", "ReviewScore", "REVIEW_SCORE",
-    "thumbs_up", "thumbsUp", "ThumbsUp", "THUMBS_UP",
-    "Product Reviews", "Item Reviews",
-    "product_reviews", "productReviews", "ProductReviews",
-    "item_reviews", "itemReviews", "ItemReviews",
-  ]
-
-  for (const field of feedbackFields) {
-    if (product[field] !== undefined) {
-      const value = Number.parseInt(product[field])
-      if (!isNaN(value)) {
-        return value
-      }
-    }
-  }
-
-  return Math.floor(Math.random() * 200) + 50
-}
-
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
 
@@ -676,10 +839,12 @@ export async function GET(request: NextRequest) {
         rating: (Math.random() * 2 + 3).toFixed(1),
         stock: Math.floor(Math.random() * 50) + 5,
       }
-      
+
       // Log the processed product name for debugging
-      console.log(`📝 Processed product ${index}: name="${processedProduct.name}", category="${processedProduct.category}"`)
-      
+      console.log(
+        `📝 Processed product ${index}: name="${processedProduct.name}", category="${processedProduct.category}"`,
+      )
+
       return processedProduct
     })
 
@@ -777,4 +942,16 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     )
   }
+}
+
+// Optional: Handle OPTIONS for CORS preflight
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  })
 }
