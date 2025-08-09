@@ -38,7 +38,8 @@ async function parseCSVStream(response: Response): Promise<Product[]> {
   let headersParsed = false
   const products: Product[] = []
   let lineCount = 0
-  const MAX_PRODUCTS = 500 // Limit to prevent memory issues
+  const MAX_PRODUCTS = 1000 // Updated memory limit to 1000 products
+  let totalLinesProcessed = 0
 
   try {
     while (true) {
@@ -58,6 +59,7 @@ async function parseCSVStream(response: Response): Promise<Product[]> {
         if (!line) continue // Skip empty lines
 
         lineCount++
+        totalLinesProcessed++
 
         if (!headersParsed) {
           // Parse headers
@@ -91,6 +93,8 @@ async function parseCSVStream(response: Response): Promise<Product[]> {
           // Stop if we have enough products
           if (products.length >= MAX_PRODUCTS) {
             console.log(`🛑 Reached maximum products limit: ${MAX_PRODUCTS}`)
+            console.log(`📊 Total lines processed: ${totalLinesProcessed}`)
+            console.log(`⚠️ NOTE: Additional products in the CSV file will NOT be loaded due to memory constraints`)
             break
           }
         } catch (rowError) {
@@ -102,14 +106,41 @@ async function parseCSVStream(response: Response): Promise<Product[]> {
       // Break if we have enough products
       if (products.length >= MAX_PRODUCTS) break
     }
+
+    // Process any remaining buffer content if we haven't hit the limit
+    if (products.length < MAX_PRODUCTS && buffer.trim()) {
+      totalLinesProcessed++
+      try {
+        const values = parseCSVLine(buffer.trim())
+        const product: Product = {}
+
+        headers.forEach((header, index) => {
+          product[header] = values[index] || ""
+        })
+
+        product.originalIndex = products.length
+        products.push(product)
+      } catch (rowError) {
+        console.warn(`⚠️ Failed to parse final buffer: ${rowError.message}`)
+      }
+    }
   } finally {
     reader.releaseLock()
   }
 
-  console.log(`📦 Streaming parse complete: ${products.length} products from ${lineCount} lines`)
+  console.log(`📦 Streaming parse complete: ${products.length} products loaded from ${totalLinesProcessed} total lines`)
+
+  if (products.length >= MAX_PRODUCTS) {
+    console.log(
+      `⚠️ IMPORTANT: Only the first ${MAX_PRODUCTS} products were loaded. The CSV file contains more data that was not processed.`,
+    )
+    console.log(`💡 To load more products, increase MAX_PRODUCTS (but be aware of memory constraints)`)
+  } else {
+    console.log(`✅ All available products were loaded (${products.length} total)`)
+  }
 
   if (products.length === 0) {
-    throw new Error(`No valid products found. Processed ${lineCount} lines`)
+    throw new Error(`No valid products found. Processed ${totalLinesProcessed} lines`)
   }
 
   return products
@@ -504,6 +535,7 @@ async function fetchProductsFromCSV(): Promise<Product[]> {
   console.log(`🔗 Environment variable SASURL: ${process.env.SASURL ? "✅ Found" : "❌ Not found"}`)
   console.log(`🔗 Environment variable SAS_URL: ${process.env.SAS_URL ? "✅ Found" : "❌ Not found"}`)
   console.log(`🔗 Using ${sasUrl ? "environment variable" : "fallback"} URL`)
+  console.log(`📊 Memory limit set to: 1000 products`)
 
   try {
     console.log(`📡 Starting streaming fetch request to Azure Blob Storage...`)
