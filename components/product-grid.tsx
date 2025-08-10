@@ -925,28 +925,65 @@ export function ProductGrid() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
       <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-10 max-w-7xl">
         {/* Header with Cart */}
-        <div className="flex items-center justify-between mb-8 sm:mb-16">
-          <div className="text-center flex-1">
-            <h1 className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 bg-clip-text text-transparent mb-4">
+        {/* Header with Cart and Session Controls */}
+        <div className="flex items-start justify-between mb-8 sm:mb-12">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-left mb-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
               Product Showcase
             </h1>
-            <p className="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto">
-              Discover our curated collection of premium products
+            <p className="text-sm sm:text-base text-muted-foreground text-left max-w-lg">
+              Discover our curated collection of premium products for kids
             </p>
-            <div className="w-20 h-0.5 bg-gradient-to-r from-primary/50 to-primary mx-auto mt-6 rounded-full"></div>
           </div>
 
-          <div className="absolute top-4 right-4 sm:relative sm:top-0 sm:right-0">
-            <ShoppingCartComponent
-              cartItems={cartItems}
-              onUpdateQuantity={handleUpdateCartQuantity}
-              onRemoveItem={handleRemoveFromCart}
-              onClearCart={handleClearCart}
-            />
+          <div className="flex flex-col sm:flex-row items-end gap-4">
+            {/* Session Tracking Controls */}
+            <div className="flex flex-col sm:flex-row gap-2 items-end">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="outline" className="font-mono text-xs">
+                  Session: {sessionData.session_id.slice(0, 8)}...
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {sessionData.itemlist.length} interactions
+                </Badge>
+              </div>
+              <div className="flex gap-1">
+                <Button
+                  onClick={() => setShowSessionPreview(!showSessionPreview)}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1 text-xs px-2 py-1 h-7"
+                >
+                  {showSessionPreview ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  <span className="hidden sm:inline">{showSessionPreview ? "Hide" : "Show"}</span>
+                </Button>
+                <Button
+                  onClick={downloadSession}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1 text-xs px-2 py-1 h-7 bg-transparent"
+                  disabled={sessionData.itemlist.length === 0}
+                >
+                  <Download className="h-3 w-3" />
+                  <span className="hidden sm:inline">JSON</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Shopping Cart */}
+            <div>
+              <ShoppingCartComponent
+                cartItems={cartItems}
+                onUpdateQuantity={handleUpdateCartQuantity}
+                onRemoveItem={handleRemoveFromCart}
+                onClearCart={handleClearCart}
+              />
+            </div>
           </div>
         </div>
 
         {/* Session Tracking Controls */}
+        {/*
         <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row gap-4 items-center justify-center">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Badge variant="outline" className="font-mono text-xs">
@@ -978,6 +1015,7 @@ export function ProductGrid() {
             </Button>
           </div>
         </div>
+        */}
 
         {/* Live Session Preview */}
         {showSessionPreview && (
