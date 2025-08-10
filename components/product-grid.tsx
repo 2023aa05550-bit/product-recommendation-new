@@ -111,6 +111,9 @@ export function ProductGrid() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [filtersInitialized, setFiltersInitialized] = useState(false)
 
+  // Liked products state
+  const [likedProducts, setLikedProducts] = useState<Set<string>>(new Set())
+
   // Pagination and filtering state
   const [filters, setFilters] = useState<FilterState>({
     category: "all",
@@ -559,9 +562,31 @@ export function ProductGrid() {
         recommendation_score: 0.85,
         reason: "Trending in your browsing category",
       },
+      {
+        id: "rec-4",
+        name: "Smart Fitness Watch",
+        description: "Advanced fitness tracking with heart rate monitoring and GPS",
+        category: "Technology",
+        image: "/placeholder.svg?height=300&width=300",
+        popularity: 720,
+        net_feedback: 450,
+        recommendation_score: 0.82,
+        reason: "Popular among users with similar interests",
+      },
+      {
+        id: "rec-5",
+        name: "Organic Coffee Beans",
+        description: "Premium single-origin coffee beans, ethically sourced",
+        category: "Food & Beverages",
+        image: "/placeholder.svg?height=300&width=300",
+        popularity: 580,
+        net_feedback: 320,
+        recommendation_score: 0.79,
+        reason: "Frequently bought together with your items",
+      },
     ]
 
-    setRecommendedProducts(mockRecommendations.slice(0, 4))
+    setRecommendedProducts(mockRecommendations.slice(0, 5))
   }
 
   // Fetch recommendations when session has interactions
@@ -684,7 +709,18 @@ export function ProductGrid() {
     setIsProductDetailOpen(true)
   }
 
-  const handleLike = (product: Product) => {
+  const handleLike = (product: Product | RecommendedProduct) => {
+    const productId = product.id
+    setLikedProducts((prev) => {
+      const newLiked = new Set(prev)
+      if (newLiked.has(productId)) {
+        newLiked.delete(productId)
+      } else {
+        newLiked.add(productId)
+      }
+      return newLiked
+    })
+
     trackEngagement(
       product.id,
       product.name,
@@ -696,11 +732,10 @@ export function ProductGrid() {
       product.net_feedback,
       product.image,
     )
-    console.log(`Liked ${product.name}`)
-    // You can add wishlist functionality here
+    console.log(`${likedProducts.has(productId) ? "Unliked" : "Liked"} ${product.name}`)
   }
 
-  const handleShare = (product: Product) => {
+  const handleShare = (product: Product | RecommendedProduct) => {
     trackEngagement(
       product.id,
       product.name,
@@ -712,14 +747,26 @@ export function ProductGrid() {
       product.net_feedback,
       product.image,
     )
+
+    const shareUrl = `${window.location.origin}${window.location.pathname}?product=${encodeURIComponent(product.name)}`
+    const shareText = `Check out this product: ${product.name} - ${product.description}`
+
     if (navigator.share) {
-      navigator.share({
-        title: product.name,
-        text: `Check out this product: ${product.name}`,
-        url: window.location.href,
-      })
+      navigator
+        .share({
+          title: product.name,
+          text: shareText,
+          url: shareUrl,
+        })
+        .catch((error) => {
+          console.log("Error sharing:", error)
+          // Fallback to clipboard
+          navigator.clipboard.writeText(`${shareText}\n${shareUrl}`)
+          alert("Product link copied to clipboard!")
+        })
     } else {
-      navigator.clipboard.writeText(`${product.name} - ${window.location.href}`)
+      // Fallback to clipboard
+      navigator.clipboard.writeText(`${shareText}\n${shareUrl}`)
       alert("Product link copied to clipboard!")
     }
   }
@@ -795,7 +842,7 @@ export function ProductGrid() {
     setIsProductDetailOpen(true)
   }
 
-  const handleRecommendedClick = (product: RecommendedProduct) => {
+  const handleRecommendedViewDetails = (product: RecommendedProduct) => {
     trackEngagement(
       product.id,
       product.name,
@@ -808,43 +855,27 @@ export function ProductGrid() {
       product.image,
     )
 
-    const productElement = document.querySelector(`[data-product-name="${product.name}"]`)
-    if (productElement) {
-      productElement.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      })
-      productElement.classList.add("ring-2", "ring-primary", "ring-offset-2")
-      setTimeout(() => {
-        productElement.classList.remove("ring-2", "ring-primary", "ring-offset-2")
-      }, 3000)
+    // Convert RecommendedProduct to Product format for the modal
+    const productForModal = {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      categories: [product.category],
+      image: product.image,
+      popularity: product.popularity,
+      net_feedback: product.net_feedback,
+      price: Math.floor(Math.random() * 100) + 10, // Mock price
+      rating: (4 + Math.random()).toFixed(1), // Mock rating
+      stock: Math.floor(Math.random() * 50) + 10, // Mock stock
     }
 
-    console.log(`Clicked on recommended product: ${product.name}`)
-  }
+    // Find similar products from the main products list
+    const similar = products.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 6)
 
-  const handleRecommendedShare = (product: RecommendedProduct) => {
-    trackEngagement(
-      product.id,
-      product.name,
-      product.description,
-      "share",
-      0,
-      0,
-      product.popularity,
-      product.net_feedback,
-      product.image,
-    )
-    if (navigator.share) {
-      navigator.share({
-        title: product.name,
-        text: `Check out this recommended product: ${product.name}`,
-        url: window.location.href,
-      })
-    } else {
-      navigator.clipboard.writeText(`${product.name} - ${window.location.href}`)
-      alert("Product link copied to clipboard!")
-    }
+    setSimilarProducts(similar)
+    setSelectedProduct(productForModal)
+    setIsProductDetailOpen(true)
   }
 
   const handleRecommendedAddToCart = (product: RecommendedProduct) => {
@@ -859,6 +890,26 @@ export function ProductGrid() {
       product.net_feedback,
       product.image,
     )
+
+    // Add recommended product to cart with mock price
+    const cartItem: CartItem = {
+      id: product.id,
+      name: product.name,
+      price: Math.floor(Math.random() * 100) + 10, // Mock price
+      quantity: 1,
+      image: product.image,
+      stock: Math.floor(Math.random() * 50) + 10, // Mock stock
+    }
+
+    setCartItems((prev) => {
+      const existingItem = prev.find((item) => item.id === product.id)
+      if (existingItem) {
+        return prev.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item))
+      } else {
+        return [...prev, cartItem]
+      }
+    })
+
     console.log(`Added recommended product to cart: ${product.name}`)
     alert(`${product.name} added to cart!`)
   }
@@ -960,7 +1011,7 @@ export function ProductGrid() {
           </div>
 
           {recommendedProducts.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {recommendedProducts.map((product) => (
                 <div
                   key={product.id}
@@ -1009,32 +1060,47 @@ export function ProductGrid() {
 
                     <p className="text-xs text-primary font-medium italic line-clamp-1">{product.reason}</p>
 
-                    <div className="flex gap-1 pt-1">
+                    <div className="grid grid-cols-4 gap-1 pt-1">
                       <Button
-                        onClick={() => handleRecommendedClick(product)}
+                        onClick={() => handleLike(product)}
                         variant="outline"
                         size="sm"
-                        className="flex-1 text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center"
+                        className={`text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center ${
+                          likedProducts.has(product.id) ? "bg-red-50 border-red-200" : ""
+                        }`}
+                        title="Like"
                       >
-                        <Heart className="h-2.5 w-2.5 mr-0.5" />
-                        <span className="hidden sm:inline">Like</span>
+                        <Heart
+                          className={`h-2.5 w-2.5 ${
+                            likedProducts.has(product.id) ? "fill-red-500 text-red-500" : "text-slate-600"
+                          }`}
+                        />
                       </Button>
                       <Button
-                        onClick={() => handleRecommendedShare(product)}
+                        onClick={() => handleShare(product)}
                         variant="outline"
                         size="sm"
-                        className="flex-1 text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center"
+                        className="text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center"
+                        title="Share"
                       >
-                        <Share2 className="h-2.5 w-2.5 mr-0.5" />
-                        <span className="hidden sm:inline">Share</span>
+                        <Share2 className="h-2.5 w-2.5" />
+                      </Button>
+                      <Button
+                        onClick={() => handleRecommendedViewDetails(product)}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center"
+                        title="View Details"
+                      >
+                        <Eye className="h-2.5 w-2.5" />
                       </Button>
                       <Button
                         onClick={() => handleRecommendedAddToCart(product)}
                         size="sm"
-                        className="flex-1 text-xs px-1 py-1 h-6 bg-primary hover:bg-primary/90 flex items-center justify-center"
+                        className="text-xs px-1 py-1 h-6 bg-primary hover:bg-primary/90 flex items-center justify-center"
+                        title="Add to Cart"
                       >
-                        <ShoppingCart className="h-2.5 w-2.5 mr-0.5" />
-                        <span className="hidden sm:inline">Cart</span>
+                        <ShoppingCart className="h-2.5 w-2.5" />
                       </Button>
                     </div>
                   </div>
@@ -1230,9 +1296,15 @@ export function ProductGrid() {
                             onClick={() => handleLike(product)}
                             variant="outline"
                             size="sm"
-                            className="flex items-center justify-center bg-transparent"
+                            className={`flex items-center justify-center bg-transparent ${
+                              likedProducts.has(product.id) ? "bg-red-50 border-red-200" : ""
+                            }`}
                           >
-                            <Heart className="h-3 w-3" />
+                            <Heart
+                              className={`h-3 w-3 ${
+                                likedProducts.has(product.id) ? "fill-red-500 text-red-500" : "text-slate-600"
+                              }`}
+                            />
                           </Button>
                           <Button
                             onClick={() => handleShare(product)}
