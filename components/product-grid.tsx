@@ -188,6 +188,8 @@ export function ProductGrid() {
       itemlist: [],
     })
 
+    connectToWebservice(sessionId)
+
     // Add welcome message
     const welcomeMessage: ChatMessage = {
       id: generateUUID(),
@@ -198,6 +200,134 @@ export function ProductGrid() {
     }
     setChatMessages([welcomeMessage])
   }, [])
+
+  const connectToWebservice = async (sessionId: string) => {
+    try {
+      const webserviceUrl =
+        "https://product-recommendation-ws-ese6bjcce8g8fafa.centralindia-01.azurewebsites.net/api/recommend"
+      console.log("🌐 Connecting to webservice:", webserviceUrl)
+
+      const response = await fetch(`${webserviceUrl}?session_id=${sessionId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (response.ok) {
+        console.log("✅ Successfully connected to webservice")
+      } else {
+        console.log("⚠️ Webservice connection failed, will use fallback recommendations")
+      }
+    } catch (error) {
+      console.log("❌ Error connecting to webservice:", error)
+    }
+  }
+
+  const fetchRecommendationsFromBackend = async (sessionId: string) => {
+    if (!sessionId) return
+
+    setRecommendationsLoading(true)
+    try {
+      // First try the external webservice
+      const webserviceUrl =
+        "https://product-recommendation-ws-ese6bjcce8g8fafa.centralindia-01.azurewebsites.net/api/recommend"
+      console.log("🔄 Fetching recommendations from webservice...")
+
+      // Send current session data to webservice
+      const sessionPayload = {
+        session_id: sessionId,
+        itemlist: sessionData.itemlist,
+      }
+
+      const response = await fetch(`${webserviceUrl}?session_id=${sessionId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(sessionPayload),
+      })
+
+      if (response.ok) {
+        const recommendations = await response.json()
+        console.log("📦 Received recommendations from webservice:", recommendations)
+
+        // Filter out any placeholder products and validate recommendations
+        const validRecommendations = recommendations.filter(
+          (rec: any) =>
+            rec.id &&
+            rec.name &&
+            !rec.id.startsWith("rec-") &&
+            !rec.name.includes("Smart Watch") &&
+            !rec.name.includes("Coffee Maker") &&
+            !rec.name.includes("Gaming Headset") &&
+            !rec.name.includes("Skincare Set"),
+        )
+
+        if (validRecommendations.length > 0) {
+          setRecommendedProducts(validRecommendations)
+          console.log("✅ Using webservice recommendations:", validRecommendations.length)
+        } else {
+          console.log("⚠️ Webservice returned invalid recommendations, using fallback")
+          generateRecommendationsFromInteractions()
+        }
+      } else {
+        console.log("⚠️ Webservice request failed, trying local API fallback")
+        await tryLocalApiFallback(sessionId)
+      }
+    } catch (error) {
+      console.log("❌ Webservice error, trying local API fallback:", error)
+      await tryLocalApiFallback(sessionId)
+    } finally {
+      setRecommendationsLoading(false)
+    }
+  }
+
+  const tryLocalApiFallback = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/recommend?session_id=${sessionId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (response.ok) {
+        const recommendations = await response.json()
+        const filteredRecommendations = recommendations.filter(
+          (rec: any) =>
+            !rec.id.startsWith("rec-") &&
+            !rec.name.includes("Smart Watch") &&
+            !rec.name.includes("Coffee Maker") &&
+            !rec.name.includes("Gaming Headset") &&
+            !rec.name.includes("Skincare Set"),
+        )
+
+        if (filteredRecommendations.length > 0) {
+          setRecommendedProducts(filteredRecommendations)
+          console.log("✅ Using local API recommendations")
+        } else {
+          generateRecommendationsFromInteractions()
+        }
+      } else {
+        generateRecommendationsFromInteractions()
+      }
+    } catch (error) {
+      console.log("❌ Local API also failed, using interaction-based recommendations")
+      generateRecommendationsFromInteractions()
+    }
+  }
+
+  useEffect(() => {
+    if (sessionData.itemlist.length > 0 && products.length > 0) {
+      const timeoutId = setTimeout(() => {
+        // Send updated session data to webservice and fetch new recommendations
+        fetchRecommendationsFromBackend(sessionData.session_id)
+      }, 1000)
+
+      return () => clearTimeout(timeoutId)
+    }
+  }, [sessionData.itemlist.length, sessionData.session_id, products.length])
 
   // Scroll to bottom of chat
   const scrollToBottom = () => {
@@ -643,53 +773,13 @@ export function ProductGrid() {
   }
 
   // Fetch recommendations from backend
-  const fetchRecommendations = async (sessionId: string) => {
-    if (!sessionId) return
-
-    setRecommendationsLoading(true)
-    try {
-      const response = await fetch(`/api/recommend?session_id=${sessionId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const recommendations = await response.json()
-        // Filter out any rec-api placeholder products
-        const filteredRecommendations = recommendations.filter(
-          (rec: any) =>
-            !rec.id.startsWith("rec-") &&
-            !rec.name.includes("Smart Watch") &&
-            !rec.name.includes("Coffee Maker") &&
-            !rec.name.includes("Gaming Headset") &&
-            !rec.name.includes("Skincare Set"),
-        )
-
-        if (filteredRecommendations.length > 0) {
-          setRecommendedProducts(filteredRecommendations)
-        } else {
-          console.log("API returned placeholder products, generating from interactions")
-          generateRecommendationsFromInteractions()
-        }
-      } else {
-        console.log("API endpoint not available, generating recommendations from interactions")
-        generateRecommendationsFromInteractions()
-      }
-    } catch (error) {
-      console.log("API call failed, generating recommendations from interactions:", error)
-      generateRecommendationsFromInteractions()
-    } finally {
-      setRecommendationsLoading(false)
-    }
-  }
 
   // Fetch recommendations when session has interactions
   useEffect(() => {
     if (sessionData.itemlist.length > 0 && products.length > 0) {
       const timeoutId = setTimeout(() => {
-        fetchRecommendations(sessionData.session_id)
+        // Send updated session data to webservice and fetch new recommendations
+        fetchRecommendationsFromBackend(sessionData.session_id)
       }, 1000)
 
       return () => clearTimeout(timeoutId)
@@ -1133,7 +1223,7 @@ export function ProductGrid() {
               <Badge className="bg-primary/10 text-primary text-xs">AI-powered</Badge>
             </div>
             <Button
-              onClick={() => fetchRecommendations(sessionData.session_id)}
+              onClick={() => fetchRecommendationsFromBackend(sessionData.session_id)}
               variant="outline"
               size="sm"
               disabled={recommendationsLoading}
