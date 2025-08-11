@@ -498,6 +498,150 @@ export function ProductGrid() {
     setRecommendedProducts(foundRecommendations)
   }
 
+  // Generate recommendations based on user interactions
+  const generateRecommendationsFromInteractions = () => {
+    if (sessionData.itemlist.length === 0 || products.length === 0) {
+      setRecommendedProducts([])
+      return
+    }
+
+    console.log("🎯 Generating recommendations from interactions...")
+    console.log("📊 Available products:", products.length)
+    console.log("📊 User interactions:", sessionData.itemlist.length)
+
+    // Get categories and products the user has interacted with
+    const interactedCategories = new Set<string>()
+    const interactedProductIds = new Set<string>()
+    const categoryInteractionCount = new Map<string, number>()
+
+    sessionData.itemlist.forEach((item) => {
+      interactedProductIds.add(item.product)
+      // Find the product in our products list to get its category
+      const product = products.find((p) => p.id === item.product)
+      if (product && product.category) {
+        const category = product.category.toLowerCase()
+        interactedCategories.add(category)
+        categoryInteractionCount.set(category, (categoryInteractionCount.get(category) || 0) + 1)
+      }
+    })
+
+    console.log("📂 Interacted categories:", Array.from(interactedCategories))
+    console.log("📂 Category interaction counts:", Object.fromEntries(categoryInteractionCount))
+
+    // Find similar products based on categories user has interacted with
+    const candidateProducts = products.filter((product) => {
+      // Don't recommend products the user has already interacted with
+      if (interactedProductIds.has(product.id)) return false
+
+      // Check if product category matches any interacted category
+      const productCategory = product.category?.toLowerCase() || ""
+      const productCategories = product.categories || [product.category]
+
+      return (
+        productCategories.some((cat: string) => interactedCategories.has(cat?.toLowerCase() || "")) ||
+        interactedCategories.has(productCategory)
+      )
+    })
+
+    console.log("🔍 Candidate products found:", candidateProducts.length)
+
+    if (candidateProducts.length === 0) {
+      // If no category matches, recommend popular products from the dataset
+      const popularProducts = products
+        .filter((product) => !interactedProductIds.has(product.id))
+        .sort((a, b) => {
+          const scoreA = (a.popularity || 0) + (a.net_feedback || 0)
+          const scoreB = (b.popularity || 0) + (b.net_feedback || 0)
+          return scoreB - scoreA
+        })
+        .slice(0, 5)
+
+      const recommendations: RecommendedProduct[] = popularProducts.map((product, index) => ({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        image: product.image || `/placeholder.svg?height=300&width=300&query=${encodeURIComponent(product.name)}`,
+        popularity: product.popularity || 0,
+        net_feedback: product.net_feedback || 0,
+        recommendation_score: Math.max(0.6, 0.8 - index * 0.05),
+        reason: "Popular choice among other users",
+      }))
+
+      console.log("✨ Generated popular recommendations:", recommendations.length)
+      setRecommendedProducts(recommendations)
+      return
+    }
+
+    // Sort candidate products by relevance score
+    const scoredProducts = candidateProducts.map((product) => {
+      const productCategory = product.category?.toLowerCase() || ""
+      const productCategories = product.categories || [product.category]
+
+      // Calculate category relevance score
+      let categoryScore = 0
+      productCategories.forEach((cat: string) => {
+        const catLower = cat?.toLowerCase() || ""
+        if (categoryInteractionCount.has(catLower)) {
+          categoryScore += categoryInteractionCount.get(catLower) || 0
+        }
+      })
+      if (categoryInteractionCount.has(productCategory)) {
+        categoryScore += categoryInteractionCount.get(productCategory) || 0
+      }
+
+      // Calculate overall score (category relevance + popularity + feedback)
+      const popularityScore = (product.popularity || 0) / 1000 // Normalize
+      const feedbackScore = (product.net_feedback || 0) / 1000 // Normalize
+      const totalScore = categoryScore * 2 + popularityScore + feedbackScore
+
+      return {
+        product,
+        score: totalScore,
+        categoryScore,
+      }
+    })
+
+    // Sort by score and take top 5
+    const topProducts = scoredProducts.sort((a, b) => b.score - a.score).slice(0, 5)
+
+    console.log(
+      "🏆 Top scored products:",
+      topProducts.map((p) => ({
+        name: p.product.name,
+        category: p.product.category,
+        score: p.score,
+        categoryScore: p.categoryScore,
+      })),
+    )
+
+    // Convert to RecommendedProduct format
+    const recommendations: RecommendedProduct[] = topProducts.map((item, index) => {
+      const { product } = item
+      const mostInteractedCategory =
+        Array.from(categoryInteractionCount.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "similar items"
+
+      return {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        image: product.image || `/placeholder.svg?height=300&width=300&query=${encodeURIComponent(product.name)}`,
+        popularity: product.popularity || 0,
+        net_feedback: product.net_feedback || 0,
+        recommendation_score: Math.max(0.7, 0.95 - index * 0.05),
+        reason: `Similar to ${mostInteractedCategory} items you've viewed`,
+      }
+    })
+
+    console.log("✅ Final recommendations generated:", recommendations.length)
+    recommendations.forEach((rec, i) => {
+      console.log(`   ${i + 1}. ${rec.name} (${rec.category}) - ${rec.reason}`)
+    })
+
+    setRecommendedProducts(recommendations)
+  }
+
   // Fetch recommendations from backend
   const fetchRecommendations = async (sessionId: string) => {
     if (!sessionId) return
@@ -513,92 +657,44 @@ export function ProductGrid() {
 
       if (response.ok) {
         const recommendations = await response.json()
-        setRecommendedProducts(recommendations)
+        // Filter out any rec-api placeholder products
+        const filteredRecommendations = recommendations.filter(
+          (rec: any) =>
+            !rec.id.startsWith("rec-") &&
+            !rec.name.includes("Smart Watch") &&
+            !rec.name.includes("Coffee Maker") &&
+            !rec.name.includes("Gaming Headset") &&
+            !rec.name.includes("Skincare Set"),
+        )
+
+        if (filteredRecommendations.length > 0) {
+          setRecommendedProducts(filteredRecommendations)
+        } else {
+          console.log("API returned placeholder products, generating from interactions")
+          generateRecommendationsFromInteractions()
+        }
       } else {
-        console.log("API endpoint not available, using mock recommendations")
-        generateMockRecommendations()
+        console.log("API endpoint not available, generating recommendations from interactions")
+        generateRecommendationsFromInteractions()
       }
     } catch (error) {
-      console.log("API call failed, using mock recommendations:", error)
-      generateMockRecommendations()
+      console.log("API call failed, generating recommendations from interactions:", error)
+      generateRecommendationsFromInteractions()
     } finally {
       setRecommendationsLoading(false)
     }
   }
 
-  // Generate mock recommendations based on user interactions
-  const generateMockRecommendations = () => {
-    const mockRecommendations: RecommendedProduct[] = [
-      {
-        id: "rec-1",
-        name: "The Great Gatsby",
-        description: "A classic American novel about the Jazz Age and the American Dream",
-        category: "Books",
-        image: "/placeholder.svg?height=300&width=300",
-        popularity: 850,
-        net_feedback: 420,
-        recommendation_score: 0.92,
-        reason: "Based on your interest in classic literature",
-      },
-      {
-        id: "rec-2",
-        name: "Inception Blu-ray",
-        description: "Mind-bending sci-fi thriller about dreams within dreams",
-        category: "Movies",
-        image: "/placeholder.svg?height=300&width=300",
-        popularity: 1200,
-        net_feedback: 890,
-        recommendation_score: 0.88,
-        reason: "Customers who viewed similar items also liked this",
-      },
-      {
-        id: "rec-3",
-        name: "Wireless Earbuds Pro",
-        description: "Premium noise-cancelling wireless earbuds with long battery life",
-        category: "Technology",
-        image: "/placeholder.svg?height=300&width=300",
-        popularity: 650,
-        net_feedback: 380,
-        recommendation_score: 0.85,
-        reason: "Trending in your browsing category",
-      },
-      {
-        id: "rec-4",
-        name: "Smart Fitness Watch",
-        description: "Advanced fitness tracking with heart rate monitoring and GPS",
-        category: "Technology",
-        image: "/placeholder.svg?height=300&width=300",
-        popularity: 720,
-        net_feedback: 450,
-        recommendation_score: 0.82,
-        reason: "Popular among users with similar interests",
-      },
-      {
-        id: "rec-5",
-        name: "Organic Coffee Beans",
-        description: "Premium single-origin coffee beans, ethically sourced",
-        category: "Food & Beverages",
-        image: "/placeholder.svg?height=300&width=300",
-        popularity: 580,
-        net_feedback: 320,
-        recommendation_score: 0.79,
-        reason: "Frequently bought together with your items",
-      },
-    ]
-
-    setRecommendedProducts(mockRecommendations.slice(0, 5))
-  }
-
   // Fetch recommendations when session has interactions
   useEffect(() => {
-    if (sessionData.itemlist.length > 0) {
+    if (sessionData.itemlist.length > 0 && products.length > 0) {
       const timeoutId = setTimeout(() => {
         fetchRecommendations(sessionData.session_id)
       }, 1000)
 
       return () => clearTimeout(timeoutId)
     }
-  }, [sessionData.itemlist.length, sessionData.session_id])
+  }, [sessionData.itemlist.length, sessionData.session_id, products.length])
 
   const trackEngagement = (
     productId: string,
