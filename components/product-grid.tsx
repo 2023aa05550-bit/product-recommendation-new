@@ -810,12 +810,23 @@ export function ProductGrid() {
       event_sequence_number: sequenceNumber,
     }
 
-    setSessionData((prev) => ({
-      ...prev,
-      itemlist: [...prev.itemlist, sessionItem],
-    }))
+    const updatedSessionData = {
+      ...sessionData,
+      itemlist: [...sessionData.itemlist, sessionItem],
+    }
 
+    setSessionData(updatedSessionData)
     setSequenceNumber((prev) => prev + 1)
+
+    fetch("/api/session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(updatedSessionData),
+    }).catch((error) => {
+      console.error("Failed to update session data:", error)
+    })
   }
 
   const handleMouseEnter = (
