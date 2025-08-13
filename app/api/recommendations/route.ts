@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     console.log("🎯 Recommendations API called - processing incoming recommendations")
 
     // Parse the request body
-    let body: RecommendationsRequest
+    let body: any
     try {
       body = await request.json()
     } catch (parseError) {
@@ -53,21 +53,53 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate that recommendations array exists
-    if (!body.recommendations || !Array.isArray(body.recommendations)) {
+    let recommendations: RecommendationItem[]
+
+    if (typeof body.recommendations === "string") {
+      console.log("📝 Recommendations received as JSON string, parsing...")
+      try {
+        const parsed = JSON.parse(body.recommendations)
+        recommendations = parsed.recommendations || parsed
+      } catch (stringParseError) {
+        console.error("❌ Failed to parse recommendations JSON string:", stringParseError)
+        return NextResponse.json(
+          {
+            error: "Invalid recommendations JSON string",
+            details: "Recommendations field contains invalid JSON string",
+            timestamp: new Date().toISOString(),
+          },
+          { status: 400, headers: corsHeaders() },
+        )
+      }
+    } else if (Array.isArray(body.recommendations)) {
+      recommendations = body.recommendations
+    } else {
       console.error("❌ Invalid recommendations format:", body)
       return NextResponse.json(
         {
           error: "Invalid recommendations format",
-          details: "Request body must contain a 'recommendations' array",
+          details: "Request body must contain a 'recommendations' array or JSON string",
           timestamp: new Date().toISOString(),
         },
         { status: 400, headers: corsHeaders() },
       )
     }
 
-    for (let i = 0; i < body.recommendations.length; i++) {
-      const rec = body.recommendations[i]
+    // Validate that recommendations array exists and is valid
+    if (!Array.isArray(recommendations)) {
+      console.error("❌ Recommendations is not an array:", recommendations)
+      return NextResponse.json(
+        {
+          error: "Invalid recommendations format",
+          details: "Recommendations must be an array",
+          timestamp: new Date().toISOString(),
+        },
+        { status: 400, headers: corsHeaders() },
+      )
+    }
+
+    for (let i = 0; i < recommendations.length; i++) {
+      const rec = recommendations[i]
       console.log(`🔍 Validating recommendation ${i + 1}:`, {
         rank: { value: rec.rank, type: typeof rec.rank, valid: typeof rec.rank === "number" },
         similarity_score: {
@@ -131,8 +163,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`📥 Received ${body.recommendations.length} recommendations:`)
-    body.recommendations.forEach((rec, index) => {
+    console.log(`📥 Received ${recommendations.length} recommendations:`)
+    recommendations.forEach((rec, index) => {
       console.log(`   ${index + 1}. ${rec.name} (${rec.category})`)
       console.log(`      Rank: ${rec.rank}, Similarity: ${rec.similarity_score}`)
       console.log(`      Price: $${rec.price}`)
@@ -141,7 +173,7 @@ export async function POST(request: NextRequest) {
 
     // Store recommendations in memory (replace the entire array)
     latestRecommendations.length = 0 // Clear existing recommendations
-    latestRecommendations.push(...body.recommendations) // Add new recommendations
+    latestRecommendations.push(...recommendations) // Add new recommendations
 
     const timestampedRecommendations = latestRecommendations.map((rec) => ({
       ...rec,
@@ -159,7 +191,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         message: "Recommendations received and stored successfully",
-        count: body.recommendations.length,
+        count: recommendations.length,
         timestamp: new Date().toISOString(),
         storedRecommendations: latestRecommendations.length,
       },
