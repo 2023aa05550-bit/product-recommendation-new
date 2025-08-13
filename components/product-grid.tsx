@@ -14,7 +14,6 @@ import {
   Share2,
   ShoppingCart,
   Star,
-  ThumbsUp,
   Download,
   Eye,
   EyeOff,
@@ -63,10 +62,9 @@ interface RecommendedProduct {
   description: string
   category: string
   image: string
-  popularity: number
-  net_feedback: number
-  recommendation_score: number
-  reason: string
+  price: number
+  rank: number
+  similarity_score: number
 }
 
 interface ChatMessage {
@@ -244,41 +242,33 @@ export function ProductGrid() {
 
     setRecommendationsLoading(true)
     try {
-      const webserviceUrl =
-        "https://product-recommendation-ws-ese6bjcce8g8fafa.centralindia-01.azurewebsites.net/api/recommend"
-      console.log("🔄 Fetching recommendations from webservice...")
+      console.log("🔄 Fetching recommendations from Vercel API...")
 
-      // Send current session data to webservice
-      const sessionPayload = {
-        session_id: sessionId,
-        itemlist: sessionData.itemlist,
-      }
-
-      const response = await fetch(`${webserviceUrl}?session_id=${sessionId}`, {
-        method: "POST",
+      // Fetch recommendations from local Vercel API
+      const response = await fetch("/api/recommendations", {
+        method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(sessionPayload),
       })
 
       if (response.ok) {
-        const recommendations = await response.json()
-        console.log("📦 Received recommendations from webservice:", recommendations)
+        const data = await response.json()
+        console.log("📦 Received recommendations from API:", data)
 
-        if (recommendations && Array.isArray(recommendations)) {
-          setRecommendedProducts(recommendations)
-          console.log("✅ Using webservice recommendations:", recommendations.length)
+        if (data.recommendations && Array.isArray(data.recommendations)) {
+          setRecommendedProducts(data.recommendations)
+          console.log("✅ Using API recommendations:", data.recommendations.length)
         } else {
-          console.log("⚠️ Webservice returned invalid format, showing empty state")
+          console.log("⚠️ API returned invalid format, showing empty state")
           setRecommendedProducts([])
         }
       } else {
-        console.log("⚠️ Webservice request failed, showing empty state")
+        console.log("⚠️ API request failed, showing empty state")
         setRecommendedProducts([])
       }
     } catch (error) {
-      console.log("❌ Webservice error, showing empty state:", error)
+      console.log("❌ API error, showing empty state:", error)
       setRecommendedProducts([])
     } finally {
       setRecommendationsLoading(false)
@@ -1065,6 +1055,7 @@ export function ProductGrid() {
 
           {recommendedProducts.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {/* Updated recommendation display to use new data structure */}
               {recommendedProducts.map((product) => (
                 <div
                   key={product.id}
@@ -1075,18 +1066,16 @@ export function ProductGrid() {
                       product.name,
                       product.description,
                       product.category || "General",
-                      product.about_product || product.description || "No additional product information available",
-                      product.popularity,
-                      product.net_feedback,
+                      product.description || "No additional product information available",
+                      product.rank,
+                      Math.round(product.similarity_score * 100),
                       product.image,
                     )
                   }
                   onMouseLeave={() => handleMouseLeave(product.id)}
                 >
                   <div className="absolute top-1 right-1 z-10">
-                    <Badge className="bg-primary text-white text-xs px-1.5 py-0.5">
-                      {Math.round(product.recommendation_score * 100)}%
-                    </Badge>
+                    <Badge className="bg-primary text-white text-xs px-1.5 py-0.5">#{product.rank}</Badge>
                   </div>
 
                   <div className="aspect-square overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 rounded-t-lg">
@@ -1104,16 +1093,14 @@ export function ProductGrid() {
 
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-1">
-                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                        <span className="font-medium text-slate-700">{product.popularity}</span>
+                        <span className="font-medium text-slate-700">${product.price}</span>
                       </div>
                       <div className="flex items-center space-x-1">
-                        <ThumbsUp className="h-3 w-3 text-green-600" />
-                        <span className="font-medium text-slate-700">{product.net_feedback}</span>
+                        <span className="font-medium text-slate-700">
+                          {Math.round(product.similarity_score * 100)}% match
+                        </span>
                       </div>
                     </div>
-
-                    <p className="text-xs text-primary font-medium italic line-clamp-1">{product.reason}</p>
 
                     <div className="grid grid-cols-4 gap-1 pt-1">
                       <Button
