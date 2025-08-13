@@ -18,6 +18,21 @@ interface RecommendationsRequest {
   recommendations: RecommendationItem[]
 }
 
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  }
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders(),
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log("🎯 Recommendations API called - processing incoming recommendations")
@@ -34,7 +49,7 @@ export async function POST(request: NextRequest) {
           details: "Request body must be valid JSON",
           timestamp: new Date().toISOString(),
         },
-        { status: 400 },
+        { status: 400, headers: corsHeaders() },
       )
     }
 
@@ -47,11 +62,31 @@ export async function POST(request: NextRequest) {
           details: "Request body must contain a 'recommendations' array",
           timestamp: new Date().toISOString(),
         },
-        { status: 400 },
+        { status: 400, headers: corsHeaders() },
       )
     }
 
-    for (const rec of body.recommendations) {
+    for (let i = 0; i < body.recommendations.length; i++) {
+      const rec = body.recommendations[i]
+      console.log(`🔍 Validating recommendation ${i + 1}:`, {
+        rank: { value: rec.rank, type: typeof rec.rank, valid: typeof rec.rank === "number" },
+        similarity_score: {
+          value: rec.similarity_score,
+          type: typeof rec.similarity_score,
+          valid: typeof rec.similarity_score === "number",
+        },
+        id: { value: rec.id, type: typeof rec.id, valid: !!rec.id },
+        name: { value: rec.name, type: typeof rec.name, valid: !!rec.name },
+        category: { value: rec.category, type: typeof rec.category, valid: !!rec.category },
+        price: { value: rec.price, type: typeof rec.price, valid: typeof rec.price === "number" },
+        image: { hasImage: !!rec.image, type: typeof rec.image, length: rec.image?.length || 0 },
+        description: {
+          hasDescription: !!rec.description,
+          type: typeof rec.description,
+          length: rec.description?.length || 0,
+        },
+      })
+
       if (
         typeof rec.rank !== "number" ||
         typeof rec.similarity_score !== "number" ||
@@ -63,14 +98,35 @@ export async function POST(request: NextRequest) {
         !rec.description
       ) {
         console.error("❌ Invalid recommendation item format:", rec)
+        console.error("❌ Validation details:", {
+          rankValid: typeof rec.rank === "number",
+          similarityValid: typeof rec.similarity_score === "number",
+          idValid: !!rec.id,
+          nameValid: !!rec.name,
+          categoryValid: !!rec.category,
+          priceValid: typeof rec.price === "number",
+          imageValid: !!rec.image,
+          descriptionValid: !!rec.description,
+        })
         return NextResponse.json(
           {
             error: "Invalid recommendation item format",
             details:
               "Each recommendation must have: rank (number), similarity_score (number), id (string), name (string), category (string), price (number), image (base64 string), description (string)",
+            failedItem: i + 1,
+            validation: {
+              rankValid: typeof rec.rank === "number",
+              similarityValid: typeof rec.similarity_score === "number",
+              idValid: !!rec.id,
+              nameValid: !!rec.name,
+              categoryValid: !!rec.category,
+              priceValid: typeof rec.price === "number",
+              imageValid: !!rec.image,
+              descriptionValid: !!rec.description,
+            },
             timestamp: new Date().toISOString(),
           },
-          { status: 400 },
+          { status: 400, headers: corsHeaders() },
         )
       }
     }
@@ -107,7 +163,7 @@ export async function POST(request: NextRequest) {
         timestamp: new Date().toISOString(),
         storedRecommendations: latestRecommendations.length,
       },
-      { status: 200 },
+      { status: 200, headers: corsHeaders() },
     )
   } catch (error) {
     console.error("❌ Error in recommendations API:", error)
@@ -118,7 +174,7 @@ export async function POST(request: NextRequest) {
         details: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
       },
-      { status: 500 },
+      { status: 500, headers: corsHeaders() },
     )
   }
 }
@@ -136,7 +192,7 @@ export async function GET(request: NextRequest) {
         message:
           latestRecommendations.length > 0 ? "Retrieved stored recommendations" : "No recommendations currently stored",
       },
-      { status: 200 },
+      { status: 200, headers: corsHeaders() },
     )
   } catch (error) {
     console.error("❌ Error retrieving recommendations:", error)
@@ -147,7 +203,7 @@ export async function GET(request: NextRequest) {
         details: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
       },
-      { status: 500 },
+      { status: 500, headers: corsHeaders() },
     )
   }
 }
