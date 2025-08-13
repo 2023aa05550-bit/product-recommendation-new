@@ -44,6 +44,7 @@ interface SessionItem {
   "about product": string
   engagement: "click" | "hover" | "share"
   "dwell time": number
+  wishlisted: 0 | 1
   added_to_cart: 0 | 1
   "product popularity": number
   net_feedback: number
@@ -812,6 +813,7 @@ export function ProductGrid() {
     popularity: number,
     feedback: number,
     image: string,
+    wishlisted: 0 | 1 = 0,
   ) => {
     const sessionItem: SessionItem = {
       product: productId,
@@ -821,6 +823,7 @@ export function ProductGrid() {
       "about product": aboutProduct,
       engagement: engagement,
       "dwell time": Math.round((dwellTime / 1000) * 100) / 100,
+      wishlisted: wishlisted,
       added_to_cart: addedToCart,
       "product popularity": popularity,
       net_feedback: feedback,
@@ -889,6 +892,7 @@ export function ProductGrid() {
         cachedData.popularity,
         cachedData.feedback,
         cachedData.image,
+        0,
       )
       delete hoverStartTimes.current[productId]
       delete productDataCache.current[productId]
@@ -920,6 +924,7 @@ export function ProductGrid() {
       product.popularity,
       product.net_feedback,
       product.image,
+      0,
     )
 
     // Find similar products (same category, different product)
@@ -945,6 +950,7 @@ export function ProductGrid() {
       product.popularity,
       product.net_feedback,
       product.image,
+      0,
     )
 
     const shareUrl = `${window.location.origin}${window.location.pathname}?product=${encodeURIComponent(product.name)}`
@@ -1016,6 +1022,7 @@ export function ProductGrid() {
       product.popularity,
       product.net_feedback,
       product.image,
+      0,
     )
 
     console.log(`Added ${quantity}x ${product.name} to cart`)
@@ -1056,6 +1063,7 @@ export function ProductGrid() {
       product.popularity,
       product.net_feedback,
       product.image,
+      0,
     )
 
     // Convert RecommendedProduct to Product format for the modal
@@ -1094,6 +1102,7 @@ export function ProductGrid() {
       product.popularity,
       product.net_feedback,
       product.image,
+      0,
     )
 
     // Add recommended product to cart with mock price
@@ -1135,6 +1144,8 @@ export function ProductGrid() {
     }
     setWishlistItems(newWishlistItems)
 
+    const isWishlisted = newWishlistItems.has(product.id) ? 1 : 0
+
     // Track wishlist action in session
     trackEngagement(
       product.id,
@@ -1142,12 +1153,13 @@ export function ProductGrid() {
       product.description,
       product.category || "General",
       product.about_product || product.description || "No additional product information available",
-      newWishlistItems.has(product.id) ? "wishlist_add" : "wishlist_remove",
+      "click",
       0,
       0,
       product.popularity,
       product.net_feedback,
       product.image,
+      isWishlisted,
     )
   }
 

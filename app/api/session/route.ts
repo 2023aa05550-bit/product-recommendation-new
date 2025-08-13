@@ -105,6 +105,7 @@ export async function GET(request: NextRequest) {
           "about product": getAboutProduct(item),
           engagement: item.engagement || "click",
           "dwell time": item["dwell time"] || 0,
+          wishlisted: item.wishlisted || 0,
           added_to_cart: item.added_to_cart || 0,
           "product popularity": item["product popularity"] || item.popularity || 0,
           net_feedback: item.net_feedback || 0,
