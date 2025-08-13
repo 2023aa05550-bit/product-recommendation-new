@@ -214,6 +214,22 @@ export function ProductGrid() {
     setChatMessages([welcomeMessage])
   }, [])
 
+  const formatImageSrc = (imageSrc: string) => {
+    if (!imageSrc) return "/placeholder.svg"
+
+    // If it's already a proper URL or data URI, return as is
+    if (imageSrc.startsWith("http") || imageSrc.startsWith("data:")) {
+      return imageSrc
+    }
+
+    // If it looks like base64 data without proper formatting, add data URI prefix
+    if (imageSrc.length > 100 && !imageSrc.includes("/") && !imageSrc.includes(".")) {
+      return `data:image/jpeg;base64,${imageSrc}`
+    }
+
+    return imageSrc
+  }
+
   const connectToWebservice = async (sessionId: string) => {
     try {
       const webserviceUrl =
@@ -1034,117 +1050,103 @@ export function ProductGrid() {
         )}
 
         {/* Recommended Products Section */}
-        <div className="mb-8 sm:mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900">Recommended for You</h2>
-              <Badge className="bg-primary/10 text-primary text-xs">AI-powered</Badge>
+        {recommendedProducts.length > 0 && (
+          <div className="mb-8 sm:mb-12">
+            <div className="flex items-center gap-3 mb-6">
+              <Sparkles className="h-6 w-6 text-purple-600" />
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Recommended for You</h2>
+              <Badge variant="secondary" className="text-xs">
+                AI Powered
+              </Badge>
             </div>
-            <Button
-              onClick={() => fetchRecommendationsFromBackend(sessionData.session_id)}
-              variant="outline"
-              size="sm"
-              disabled={recommendationsLoading}
-              className="flex items-center gap-2"
-            >
-              <RefreshCw className={`h-3 w-3 ${recommendationsLoading ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Refresh</span>
-            </Button>
-          </div>
 
-          {recommendedProducts.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {/* Updated recommendation display to use new data structure */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
               {recommendedProducts.map((product) => (
-                <div
+                <Card
                   key={product.id}
-                  className="group bg-white rounded-lg shadow-sm border hover:shadow-md transition-all duration-200 cursor-pointer relative overflow-hidden"
+                  className="group hover:shadow-lg transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm hover:bg-white"
                   onMouseEnter={() =>
                     handleMouseEnter(
                       product.id,
                       product.name,
                       product.description,
-                      product.category || "General",
-                      product.description || "No additional product information available",
-                      product.rank,
-                      Math.round(product.similarity_score * 100),
+                      product.category,
+                      product.description,
+                      product.popularity || 0,
+                      product.net_feedback || 0,
                       product.image,
                     )
                   }
                   onMouseLeave={() => handleMouseLeave(product.id)}
                 >
-                  <div className="absolute top-1 right-1 z-10">
-                    <Badge className="bg-primary text-white text-xs px-1.5 py-0.5">#{product.rank}</Badge>
-                  </div>
-
-                  <div className="aspect-square overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 rounded-t-lg">
-                    <img
-                      src={product.image || "/placeholder.svg"}
-                      alt={product.name}
-                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                    />
-                  </div>
-
-                  <div className="p-2 sm:p-3 space-y-2">
-                    <h3 className="font-medium text-xs sm:text-sm text-slate-900 line-clamp-2 leading-tight">
-                      {product.name}
-                    </h3>
-
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center space-x-1">
-                        <span className="font-medium text-slate-700">${product.price}</span>
+                  <CardContent className="p-4">
+                    <div className="aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 mb-3 relative">
+                      <img
+                        src={formatImageSrc(product.image) || "/placeholder.svg"}
+                        alt={product.name}
+                        className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.src = `/placeholder.svg?height=300&width=300&query=${encodeURIComponent(product.name)}`
+                        }}
+                      />
+                      <div className="absolute top-2 left-2">
+                        <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-700">
+                          Rank #{product.rank}
+                        </Badge>
                       </div>
-                      <div className="flex items-center space-x-1">
-                        <span className="font-medium text-slate-700">
+                      <div className="absolute top-2 right-2">
+                        <Badge variant="outline" className="text-xs bg-white/90">
                           {Math.round(product.similarity_score * 100)}% match
-                        </span>
+                        </Badge>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-1 pt-1">
-                      <Button
-                        onClick={() => handleShare(product)}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center"
-                        title="Share"
-                      >
-                        <Share2 className="h-2.5 w-2.5 text-slate-600" />
-                      </Button>
-                      <Button
-                        onClick={() => handleRecommendedViewDetails(product)}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center"
-                        title="View Details"
-                      >
-                        <Eye className="h-2.5 w-2.5" />
-                      </Button>
-                      <Button
-                        onClick={() => handleRecommendedAddToCart(product)}
-                        size="sm"
-                        className="text-xs px-1 py-1 h-6 bg-primary hover:bg-primary/90 flex items-center justify-center"
-                        title="Add to Cart"
-                      >
-                        <ShoppingCart className="h-2.5 w-2.5" />
-                      </Button>
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-sm line-clamp-2 text-slate-900 group-hover:text-primary transition-colors">
+                        {product.name}
+                      </h3>
+                      <p className="text-xs text-slate-600 line-clamp-2">{product.description}</p>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-bold text-primary">${product.price}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {product.category}
+                        </Badge>
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleRecommendedViewDetails(product)}
+                          className="flex-1 text-xs h-8"
+                        >
+                          View Details
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRecommendedAddToCart(product)}
+                          className="flex items-center gap-1 text-xs h-8 bg-transparent"
+                        >
+                          <ShoppingCart className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleShare(product)}
+                          className="flex items-center gap-1 text-xs h-8 bg-transparent"
+                        >
+                          <Share2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
-          ) : (
-            <div className="text-center py-8">
-              <div className="text-slate-400 mb-2">
-                <Sparkles className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              </div>
-              <p className="text-slate-500 text-sm">
-                Start chatting with our AI assistant to get personalized recommendations!
-              </p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Main Content with Filters and Products */}
         <div className="flex flex-col lg:flex-row gap-6">
