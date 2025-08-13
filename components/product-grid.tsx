@@ -31,7 +31,6 @@ import {
   Plus,
 } from "lucide-react"
 import { ProductDetailModal } from "./product-detail-modal"
-import { ShoppingCartComponent } from "./shopping-cart"
 
 interface Product {
   [key: string]: any
@@ -114,7 +113,8 @@ export function ProductGrid() {
   const [filtersInitialized, setFiltersInitialized] = useState(false)
 
   // Liked products state
-  const [likedProducts, setLikedProducts] = useState<Set<string>>(new Set())
+  const [wishlistItems, setWishlistItems] = useState<Set<string>>(new Set())
+  const [showWishlist, setShowWishlist] = useState(false)
 
   // Pagination and filtering state
   const [filters, setFilters] = useState<FilterState>({
@@ -173,6 +173,7 @@ export function ProductGrid() {
 
   // Cart state
   const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [isCartOpen, setIsCartOpen] = useState(false)
 
   // Product detail modal state
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -931,34 +932,6 @@ export function ProductGrid() {
     setIsProductDetailOpen(true)
   }
 
-  const handleLike = (product: Product | RecommendedProduct) => {
-    const productId = product.id
-    setLikedProducts((prev) => {
-      const newLiked = new Set(prev)
-      if (newLiked.has(productId)) {
-        newLiked.delete(productId)
-      } else {
-        newLiked.add(productId)
-      }
-      return newLiked
-    })
-
-    trackEngagement(
-      product.id,
-      product.name,
-      product.description,
-      product.category || "General",
-      product.about_product || product.description || "No additional product information available",
-      "click",
-      0,
-      0,
-      product.popularity,
-      product.net_feedback,
-      product.image,
-    )
-    console.log(`${likedProducts.has(productId) ? "Unliked" : "Liked"} ${product.name}`)
-  }
-
   const handleShare = (product: Product | RecommendedProduct) => {
     trackEngagement(
       product.id,
@@ -1153,6 +1126,31 @@ export function ProductGrid() {
     }
   }
 
+  const handleWishlistToggle = (product: Product) => {
+    const newWishlistItems = new Set(wishlistItems)
+    if (newWishlistItems.has(product.id)) {
+      newWishlistItems.delete(product.id)
+    } else {
+      newWishlistItems.add(product.id)
+    }
+    setWishlistItems(newWishlistItems)
+
+    // Track wishlist action in session
+    trackEngagement(
+      product.id,
+      product.name,
+      product.description,
+      product.category || "General",
+      product.about_product || product.description || "No additional product information available",
+      newWishlistItems.has(product.id) ? "wishlist_add" : "wishlist_remove",
+      0,
+      0,
+      product.popularity,
+      product.net_feedback,
+      product.image,
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
       <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-10 max-w-7xl">
@@ -1169,6 +1167,16 @@ export function ProductGrid() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-end gap-4">
+            <Button
+              onClick={() => setShowWishlist(true)}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 bg-white hover:bg-red-50 border-red-200 text-red-600"
+            >
+              <Heart className="h-4 w-4" />
+              <span>Wishlist ({wishlistItems.size})</span>
+            </Button>
+
             {/* Session Tracking Controls */}
             <div className="flex flex-col sm:flex-row gap-2 items-end">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1202,15 +1210,21 @@ export function ProductGrid() {
               </div>
             </div>
 
-            {/* Shopping Cart */}
-            <div>
-              <ShoppingCartComponent
-                cartItems={cartItems}
-                onUpdateQuantity={handleUpdateCartQuantity}
-                onRemoveItem={handleRemoveFromCart}
-                onClearCart={handleClearCart}
-              />
-            </div>
+            {/* Cart Button */}
+            <Button
+              onClick={() => setIsCartOpen(true)}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 bg-white hover:bg-primary/5 relative"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              <span>Cart ({cartItems.reduce((sum, item) => sum + item.quantity, 0)})</span>
+              {cartItems.length > 0 && (
+                <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs bg-primary">
+                  {cartItems.reduce((sum, item) => sum + item.quantity, 0)}
+                </Badge>
+              )}
+            </Button>
           </div>
         </div>
 
@@ -1334,28 +1348,13 @@ export function ProductGrid() {
 
                     <div className="grid grid-cols-4 gap-1 pt-1">
                       <Button
-                        onClick={() => handleLike(product)}
-                        variant="outline"
-                        size="sm"
-                        className={`text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center ${
-                          likedProducts.has(product.id) ? "bg-red-50 border-red-200" : ""
-                        }`}
-                        title="Like"
-                      >
-                        <Heart
-                          className={`h-2.5 w-2.5 ${
-                            likedProducts.has(product.id) ? "fill-red-500 text-red-500" : "text-slate-600"
-                          }`}
-                        />
-                      </Button>
-                      <Button
                         onClick={() => handleShare(product)}
                         variant="outline"
                         size="sm"
                         className="text-xs px-1 py-1 h-6 hover:bg-slate-50 flex items-center justify-center"
                         title="Share"
                       >
-                        <Share2 className="h-2.5 w-2.5" />
+                        <Share2 className="h-2.5 w-2.5 text-slate-600" />
                       </Button>
                       <Button
                         onClick={() => handleRecommendedViewDetails(product)}
@@ -1567,16 +1566,16 @@ export function ProductGrid() {
                             View Details
                           </Button>
                           <Button
-                            onClick={() => handleLike(product)}
+                            onClick={() => handleWishlistToggle(product)}
                             variant="outline"
                             size="sm"
                             className={`flex items-center justify-center bg-transparent ${
-                              likedProducts.has(product.id) ? "bg-red-50 border-red-200" : ""
+                              wishlistItems.has(product.id) ? "bg-red-50 border-red-200" : ""
                             }`}
                           >
                             <Heart
                               className={`h-3 w-3 ${
-                                likedProducts.has(product.id) ? "fill-red-500 text-red-500" : "text-slate-600"
+                                wishlistItems.has(product.id) ? "fill-red-500 text-red-500" : "text-slate-600"
                               }`}
                             />
                           </Button>
@@ -1814,6 +1813,89 @@ export function ProductGrid() {
           </Card>
         )}
       </div>
+
+      <Dialog open={showWishlist} onOpenChange={setShowWishlist}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Heart className="h-5 w-5 text-pink-500" />
+              My Wishlist ({wishlistItems.size} items)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh]">
+            {wishlistItems.size === 0 ? (
+              <div className="text-center py-8">
+                <Heart className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">Your wishlist is empty</p>
+                <p className="text-sm text-gray-400">Click the heart icon on products to add them here</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {products
+                  .filter((product) => wishlistItems.has(product.id))
+                  .map((product) => (
+                    <Card key={product.id} className="group hover:shadow-lg transition-all duration-300">
+                      <CardHeader className="p-0">
+                        <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200">
+                          <img
+                            src={product.image || "/placeholder.svg"}
+                            alt={product.name}
+                            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement
+                              target.src = `/placeholder.svg?height=200&width=200&query=${encodeURIComponent(product.name)}`
+                            }}
+                          />
+                          <Button
+                            onClick={() => handleWishlistToggle(product)}
+                            variant="ghost"
+                            size="sm"
+                            className="absolute top-2 right-2 h-8 w-8 p-0 bg-white/80 hover:bg-white"
+                          >
+                            <Heart className="h-4 w-4 fill-red-500 text-red-500" />
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-3 space-y-2">
+                        <h3 className="font-semibold text-sm line-clamp-2">{product.name}</h3>
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-bold text-primary">${product.price}</span>
+                          <div className="flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            <span className="text-xs">{product.rating}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => {
+                              handleViewDetails(product)
+                              setShowWishlist(false)
+                            }}
+                            size="sm"
+                            className="flex-1 text-xs"
+                          >
+                            View Details
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              handleAddToCartClick(product)
+                              setShowWishlist(false)
+                            }}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 text-xs"
+                          >
+                            Add to Cart
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
