@@ -4,29 +4,18 @@ import { type NextRequest, NextResponse } from "next/server"
 import { latestRecommendations } from "../session/route"
 
 interface RecommendationItem {
+  rank: number
+  similarity_score: number
   id: string
   name: string
-  description?: string
-  category?: string
-  price?: number
-  popularity?: number
-  net_feedback?: number
-  recommendation_score?: number
-  reason?: string
-  image?: string
-  [key: string]: any
+  category: string
+  price: number
+  image: string // base64 encoded image
+  description: string
 }
 
 interface RecommendationsRequest {
   recommendations: RecommendationItem[]
-  sessionId?: string
-  timestamp?: string
-  metadata?: {
-    source?: string
-    algorithm?: string
-    confidence?: number
-    [key: string]: any
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -62,35 +51,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log the received recommendations
+    for (const rec of body.recommendations) {
+      if (
+        typeof rec.rank !== "number" ||
+        typeof rec.similarity_score !== "number" ||
+        !rec.id ||
+        !rec.name ||
+        !rec.category ||
+        typeof rec.price !== "number" ||
+        !rec.image ||
+        !rec.description
+      ) {
+        console.error("❌ Invalid recommendation item format:", rec)
+        return NextResponse.json(
+          {
+            error: "Invalid recommendation item format",
+            details:
+              "Each recommendation must have: rank (number), similarity_score (number), id (string), name (string), category (string), price (number), image (base64 string), description (string)",
+            timestamp: new Date().toISOString(),
+          },
+          { status: 400 },
+        )
+      }
+    }
+
     console.log(`📥 Received ${body.recommendations.length} recommendations:`)
     body.recommendations.forEach((rec, index) => {
-      console.log(`   ${index + 1}. ${rec.name || rec.id || "Unknown"} (${rec.category || "No category"})`)
-      if (rec.recommendation_score) {
-        console.log(`      Score: ${rec.recommendation_score}`)
-      }
-      if (rec.reason) {
-        console.log(`      Reason: ${rec.reason}`)
-      }
+      console.log(`   ${index + 1}. ${rec.name} (${rec.category})`)
+      console.log(`      Rank: ${rec.rank}, Similarity: ${rec.similarity_score}`)
+      console.log(`      Price: $${rec.price}`)
+      console.log(`      ID: ${rec.id}`)
     })
-
-    // Log additional metadata if provided
-    if (body.sessionId) {
-      console.log(`📊 Session ID: ${body.sessionId}`)
-    }
-    if (body.metadata) {
-      console.log(`📊 Metadata:`, body.metadata)
-    }
 
     // Store recommendations in memory (replace the entire array)
     latestRecommendations.length = 0 // Clear existing recommendations
     latestRecommendations.push(...body.recommendations) // Add new recommendations
 
-    // Add timestamp to stored recommendations
     const timestampedRecommendations = latestRecommendations.map((rec) => ({
       ...rec,
       receivedAt: new Date().toISOString(),
-      sessionId: body.sessionId || null,
     }))
 
     // Update the stored recommendations with timestamps
@@ -106,7 +105,6 @@ export async function POST(request: NextRequest) {
         message: "Recommendations received and stored successfully",
         count: body.recommendations.length,
         timestamp: new Date().toISOString(),
-        sessionId: body.sessionId || null,
         storedRecommendations: latestRecommendations.length,
       },
       { status: 200 },
