@@ -304,9 +304,6 @@ function getProductDescription(product: Product): string {
     "item_description",
     "itemDescription",
     "ItemDescription",
-    "about",
-    "About",
-    "ABOUT",
   ]
 
   for (const field of descFields) {
@@ -513,6 +510,61 @@ function getNetFeedback(product: Product): number {
   }
 
   return Math.floor(Math.random() * 200) + 50
+}
+
+function getAboutProduct(product: Product): string {
+  const aboutFields = [
+    "about",
+    "About",
+    "ABOUT",
+    "about_product",
+    "aboutProduct",
+    "AboutProduct",
+    "ABOUT_PRODUCT",
+    "product_about",
+    "productAbout",
+    "ProductAbout",
+    "PRODUCT_ABOUT",
+    "details",
+    "Details",
+    "DETAILS",
+    "specifications",
+    "Specifications",
+    "SPECIFICATIONS",
+    "features",
+    "Features",
+    "FEATURES",
+    "overview",
+    "Overview",
+    "OVERVIEW",
+    "summary",
+    "Summary",
+    "SUMMARY",
+    "info",
+    "Info",
+    "INFO",
+    "product_info",
+    "productInfo",
+    "ProductInfo",
+    "PRODUCT_INFO",
+    "long_description",
+    "longDescription",
+    "LongDescription",
+    "LONG_DESCRIPTION",
+    "extended_description",
+    "extendedDescription",
+    "ExtendedDescription",
+    "EXTENDED_DESCRIPTION",
+  ]
+
+  for (const field of aboutFields) {
+    if (product[field] && typeof product[field] === "string" && product[field].trim()) {
+      return product[field].trim()
+    }
+  }
+
+  // Fallback to description if no specific "about" field found
+  return getProductDescription(product)
 }
 
 async function fetchProductsFromCSV(): Promise<Product[]> {
@@ -839,6 +891,7 @@ export async function GET(request: NextRequest) {
         categories: getProductCategories(product),
         category: getProductCategories(product)[0] || "General",
         description: getProductDescription(product),
+        about_product: getAboutProduct(product),
         image: getProductImage(product),
         popularity: getPopularity(product),
         net_feedback: getNetFeedback(product),

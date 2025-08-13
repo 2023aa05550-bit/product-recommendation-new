@@ -41,6 +41,8 @@ interface SessionItem {
   product: string
   "product name": string
   description: string
+  category: string
+  "about product": string
   engagement: "click" | "hover" | "share"
   "dwell time": number
   added_to_cart: 0 | 1
@@ -155,7 +157,18 @@ export function ProductGrid() {
 
   const hoverStartTimes = useRef<Record<string, number>>({})
   const productDataCache = useRef<
-    Record<string, { name: string; description: string; popularity: number; feedback: number; image: string }>
+    Record<
+      string,
+      {
+        name: string
+        description: string
+        category: string
+        aboutProduct: string
+        popularity: number
+        feedback: number
+        image: string
+      }
+    >
   >({})
 
   // Cart state
@@ -790,6 +803,8 @@ export function ProductGrid() {
     productId: string,
     productName: string,
     description: string,
+    category: string,
+    aboutProduct: string,
     engagement: "click" | "hover" | "share",
     dwellTime = 0,
     addedToCart: 0 | 1 = 0,
@@ -801,6 +816,8 @@ export function ProductGrid() {
       product: productId,
       "product name": productName,
       description: description,
+      category: category,
+      "about product": aboutProduct,
       engagement: engagement,
       "dwell time": Math.round((dwellTime / 1000) * 100) / 100,
       added_to_cart: addedToCart,
@@ -833,6 +850,8 @@ export function ProductGrid() {
     productId: string,
     productName: string,
     description: string,
+    category: string,
+    aboutProduct: string,
     popularity: number,
     feedback: number,
     image: string,
@@ -843,6 +862,8 @@ export function ProductGrid() {
     productDataCache.current[productId] = {
       name: productName,
       description: description,
+      category: category,
+      aboutProduct: aboutProduct,
       popularity: popularity,
       feedback: feedback,
       image: image,
@@ -859,6 +880,8 @@ export function ProductGrid() {
         productId,
         cachedData.name,
         cachedData.description,
+        cachedData.category,
+        cachedData.aboutProduct,
         "hover",
         dwellTime,
         0,
@@ -888,6 +911,8 @@ export function ProductGrid() {
       product.id,
       product.name,
       product.description,
+      product.category || "General",
+      product.about_product || product.description || "No additional product information available",
       "click",
       0,
       0,
@@ -922,6 +947,8 @@ export function ProductGrid() {
       product.id,
       product.name,
       product.description,
+      product.category || "General",
+      product.about_product || product.description || "No additional product information available",
       "click",
       0,
       0,
@@ -937,6 +964,8 @@ export function ProductGrid() {
       product.id,
       product.name,
       product.description,
+      product.category || "General",
+      product.about_product || product.description || "No additional product information available",
       "share",
       0,
       0,
@@ -1006,6 +1035,8 @@ export function ProductGrid() {
       product.id,
       product.name,
       product.description,
+      product.category || "General",
+      product.about_product || product.description || "No additional product information available",
       "click",
       0,
       1,
@@ -1044,6 +1075,8 @@ export function ProductGrid() {
       product.id,
       product.name,
       product.description,
+      product.category || "General",
+      product.about_product || product.description || "No additional product information available",
       "click",
       0,
       0,
@@ -1080,6 +1113,8 @@ export function ProductGrid() {
       product.id,
       product.name,
       product.description,
+      product.category || "General",
+      product.about_product || product.description || "No additional product information available",
       "click",
       0,
       1,
@@ -1256,6 +1291,8 @@ export function ProductGrid() {
                       product.id,
                       product.name,
                       product.description,
+                      product.category || "General",
+                      product.about_product || product.description || "No additional product information available",
                       product.popularity,
                       product.net_feedback,
                       product.image,
@@ -1472,6 +1509,8 @@ export function ProductGrid() {
                           product.id,
                           product.name,
                           product.description,
+                          product.category || "General",
+                          product.about_product || product.description || "No additional product information available",
                           product.popularity,
                           product.net_feedback,
                           product.image,

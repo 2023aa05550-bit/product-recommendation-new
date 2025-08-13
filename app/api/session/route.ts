@@ -17,6 +17,61 @@ let liveSessionData: any = {
   },
 }
 
+function getAboutProduct(product: any): string {
+  const aboutFields = [
+    "about",
+    "About",
+    "ABOUT",
+    "about_product",
+    "aboutProduct",
+    "AboutProduct",
+    "ABOUT_PRODUCT",
+    "product_about",
+    "productAbout",
+    "ProductAbout",
+    "PRODUCT_ABOUT",
+    "details",
+    "Details",
+    "DETAILS",
+    "specifications",
+    "Specifications",
+    "SPECIFICATIONS",
+    "features",
+    "Features",
+    "FEATURES",
+    "overview",
+    "Overview",
+    "OVERVIEW",
+    "summary",
+    "Summary",
+    "SUMMARY",
+    "info",
+    "Info",
+    "INFO",
+    "product_info",
+    "productInfo",
+    "ProductInfo",
+    "PRODUCT_INFO",
+    "long_description",
+    "longDescription",
+    "LongDescription",
+    "LONG_DESCRIPTION",
+    "extended_description",
+    "extendedDescription",
+    "ExtendedDescription",
+    "EXTENDED_DESCRIPTION",
+  ]
+
+  for (const field of aboutFields) {
+    if (product[field] && typeof product[field] === "string" && product[field].trim()) {
+      return product[field].trim()
+    }
+  }
+
+  // Fallback to description if no specific "about" field found
+  return product.description || "No additional product information available"
+}
+
 export function updateLiveSession(sessionData: any) {
   liveSessionData = {
     ...sessionData,
@@ -40,33 +95,28 @@ export async function GET(request: NextRequest) {
     console.log("📊 Session API called - returning live session data")
 
     const responseData = {
-      sessionId: liveSessionData.session_id || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      userId: `user_${Math.random().toString(36).substr(2, 8)}`,
-      products:
+      session_id: liveSessionData.session_id || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      itemlist:
         liveSessionData.itemlist?.map((item: any, index: number) => ({
-          id: item.product,
-          name: item["product name"],
-          description: item.description,
-          category: "Electronics", // Default category since not tracked in current structure
-          price: 0, // Price not tracked in current structure
-          engagement: item.engagement,
-          dwellTime: item["dwell time"],
-          addedToCart: item.added_to_cart,
-          productPopularity: item["product popularity"],
-          netFeedback: item.net_feedback,
-          image: item.image,
-          eventSequenceNumber: item.event_sequence_number,
+          product: item.product || item.id || `product_${index}`,
+          "product name": item["product name"] || item.name || `Product ${index + 1}`,
+          description: item.description || "No description available",
+          category: item.category || item.categories?.[0] || "General",
+          "about product": getAboutProduct(item),
+          engagement: item.engagement || "click",
+          "dwell time": item["dwell time"] || 0,
+          added_to_cart: item.added_to_cart || 0,
+          "product popularity": item["product popularity"] || item.popularity || 0,
+          net_feedback: item.net_feedback || 0,
+          image: item.image || null,
+          event_sequence_number: item.event_sequence_number || index + 1,
         })) || [],
-      sessionMetadata: liveSessionData.sessionMetadata,
-      recommendations: latestRecommendations.length > 0 ? latestRecommendations : null,
     }
 
     console.log(`📊 Live session response prepared:`)
-    console.log(`   - Session ID: ${responseData.sessionId}`)
-    console.log(`   - Products: ${responseData.products.length}`)
-    console.log(`   - Recommendations: ${latestRecommendations.length}`)
-    console.log(`   - Total Dwell Time: ${liveSessionData.sessionMetadata.totalDwellTime}s`)
+    console.log(`   - Session ID: ${responseData.session_id}`)
+    console.log(`   - Items: ${responseData.itemlist.length}`)
+    console.log(`   - Format: Updated to new specification`)
 
     return NextResponse.json(responseData, { status: 200 })
   } catch (error) {
